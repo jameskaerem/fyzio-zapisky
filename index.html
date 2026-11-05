@@ -47,7 +47,11 @@
     <p id="error" class="error" role="alert" hidden></p>
 
     <section id="result" class="card" hidden>
-      <h2 id="resultTitle"></h2>
+      <p id="resultPath" class="result-path small"></p>
+      <div class="row title-row">
+        <h2 id="resultTitle"></h2>
+        <button id="editBtn" type="button" class="ghost small-btn" title="Rename or move to another folder">✎ Edit</button>
+      </div>
       <p id="resultMeta" class="muted small result-meta"></p>
       <div class="toolbar">
         <div class="tabs" role="tablist">
@@ -65,10 +69,17 @@
       <p class="muted small">Tip: “Copy notes” and paste into Notion – headings and lists keep their formatting.</p>
     </section>
 
-    <section id="historySection" class="card" hidden>
-      <h2>Earlier lessons</h2>
-      <p class="muted small">Saved only in this browser.</p>
-      <ul id="historyList" class="history"></ul>
+    <section id="librarySection" class="card" hidden>
+      <div class="row library-head">
+        <h2>📚 Library</h2>
+        <div class="actions">
+          <button id="exportBtn" type="button" class="ghost">Export backup</button>
+          <label class="ghost button-like">Import<input id="importInput" type="file" accept="application/json,.json" hidden></label>
+        </div>
+      </div>
+      <input id="librarySearch" type="search" placeholder="Search lessons…" aria-label="Search lessons">
+      <div id="library" class="library"></div>
+      <p class="muted small">Saved only in this browser. Use “Export backup” now and then to keep a copy.</p>
     </section>
   </main>
 
@@ -108,10 +119,31 @@
     </form>
   </dialog>
 
+  <dialog id="editDialog">
+    <form id="editForm" method="dialog">
+      <h2>Edit lesson</h2>
+      <label>Title
+        <input id="editTitle" type="text" required>
+      </label>
+      <label>Subject
+        <select id="editSubject"></select>
+      </label>
+      <label>Folder (topic)
+        <input id="editTopic" type="text" list="topicOptions" placeholder="Nezařazeno">
+        <datalist id="topicOptions"></datalist>
+      </label>
+      <div class="dialog-actions">
+        <button type="submit" value="cancel" class="ghost" formnovalidate>Cancel</button>
+        <button type="submit" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="vendor/mp4box.all.min.js"></script>
   <script src="vendor/marked.min.js"></script>
   <script src="vendor/purify.min.js"></script>
   <script src="subjects.js"></script>
+  <script src="db.js"></script>
   <script src="audio.js"></script>
   <script src="app.js"></script>
 </body>

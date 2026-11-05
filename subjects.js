@@ -134,9 +134,25 @@
     },
   };
 
-  const BASE_NOTES_PROMPT = (subject) => `Jsi pečlivý asistent, který připravuje studentku na přijímací zkoušky na vysokou školu, obor fyzioterapie. Dostaneš automatický přepis české výukové hodiny předmětu ${subject.label}. Vytvoř z něj přehledné studijní zápisky v češtině ve formátu Markdown.
+  const topicList = (topics) => (topics && topics.length
+    ? topics.map((t) => `- ${t}`).join("\n")
+    : "(zatím žádné)");
 
-Obecná pravidla:
+  const BASE_NOTES_PROMPT = (subject, existingTopics) => `Jsi pečlivý asistent, který připravuje studentku na přijímací zkoušky na vysokou školu, obor fyzioterapie. Dostaneš automatický přepis české výukové hodiny předmětu ${subject.label}. Vytvoř z něj přehledné studijní zápisky v češtině ve formátu Markdown.
+
+Výstup MUSÍ začínat přesně těmito dvěma řádky metadat a oddělovačem, teprve potom zápisky:
+TÉMA: <název složky – širší tematický celek předmětu>
+NÁZEV: <název hodiny>
+---
+
+Pravidla pro metadata:
+- TÉMA je širší celek podle osnov přijímaček (např. chemie: "Anorganické názvosloví", "Chemické výpočty", "Biochemie – bílkoviny"; somatologie: "Pohybová soustava – kosti", "Oběhová soustava"; fyzika: "Mechanika – síly a pohyb", "Elektřina a magnetismus"; biologie: "Genetika", "Buňka").
+- Existující složky předmětu ${subject.label}:
+${topicList(existingTopics)}
+- Pokud hodina patří do některé existující složky, použij PŘESNĚ její název. Novou složku vytvoř jen tehdy, když žádná nesedí.
+- NÁZEV piš ve tvaru "<Hlavní téma> – <konkrétní obsah>", stručně (max. 70 znaků), bez slova "hodina" a bez data, např. "Kyslíkaté kyseliny – názvosloví a vzorce" nebo "Kosti horní končetiny – pletenec a volná končetina".
+
+Obecná pravidla pro zápisky:
 - Začni nadpisem "# " s výstižným názvem tématu hodiny a pod ním krátkým shrnutím (2–4 věty).
 - Obsah rozděl do sekcí "##" (případně "###") podle témat v pořadí, v jakém zazněla.
 - Důležité definice, pravidla a vzorce dej do calloutu: řádek začínající "> 💡 **Klíčové:** ".
@@ -152,5 +168,15 @@ Na konec přidej:
 - "## Testové otázky" – 5 otázek ve stylu přijímacích testů (výběr ze 4 možností a–d) k probranému učivu,
 - "## Řešení" se správnými odpověďmi a jednovětým vysvětlením.`;
 
-  window.Subjects = { SUBJECTS, BASE_NOTES_PROMPT };
+  // Used for the first audio part while the subject is still unknown
+  const AUTO_CONTEXT =
+    "Výuková hodina v češtině, příprava na přijímací zkoušky na fyzioterapii. Předmět je chemie, fyzika, " +
+    "biologie nebo somatologie (anatomie a fyziologie člověka).";
+  const AUTO_TERMS = () => Object.values(SUBJECTS).flatMap((s) => s.terms.slice(0, 25));
+
+  const CLASSIFY_PROMPT = `Urči, o jaký předmět jde v této ukázce přepisu výukové hodiny. Možnosti: ${Object.keys(SUBJECTS).join(", ")}.
+Somatologie = anatomie a fyziologie člověka (kosti, svaly, orgány, soustavy). Biologie = obecná biologie, buňka, genetika, ekologie, evoluce, mikroorganismy.
+Odpověz pouze jedním slovem z možností, malými písmeny, bez diakritiky navíc.`;
+
+  window.Subjects = { SUBJECTS, BASE_NOTES_PROMPT, AUTO_CONTEXT, AUTO_TERMS, CLASSIFY_PROMPT };
 })();

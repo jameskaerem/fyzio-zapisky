@@ -1,7 +1,8 @@
 (function () {
   "use strict";
 
-  const { SUBJECTS, BASE_NOTES_PROMPT } = window.Subjects;
+  const { SUBJECTS, BASE_NOTES_PROMPT, AUTO_CONTEXT, AUTO_TERMS, CLASSIFY_PROMPT } = window.Subjects;
+  const UNSORTED = "Nezařazeno";
 
   /* ---------- Settings ---------- */
   const SETTINGS_VERSION = 3;
@@ -12,7 +13,7 @@
     engine: "auto", // auto | elevenlabs | openai
     notesModel: "auto", // auto | explicit OpenAI model id
     extraTerms: "",
-    subject: "chemie",
+    subject: "auto", // auto | subject id
   };
 
   // Transcription price per minute of audio (USD), for the estimate shown to the user
@@ -28,6 +29,9 @@
     set(key, value) {
       try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; }
     },
+    remove(key) {
+      try { localStorage.removeItem(key); } catch { /* ignore */ }
+    },
   };
 
   function loadSettings() {
@@ -40,8 +44,8 @@
   }
 
   let settings = loadSettings();
-  let history = store.get("tv.history", []);
-  let current = null; // { id, title, subject, engine, notesModel, date, transcript, notes }
+  let lessons = []; // library, loaded from IndexedDB
+  let current = null; // { id, title, subject, topic, engine, notesModel, date, transcript, notes }
   let busy = false;
 
   /* ---------- DOM ---------- */
@@ -54,11 +58,15 @@
     keyWarning: $("keyWarning"), subjects: $("subjects"), drop: $("drop"), fileInput: $("fileInput"),
     engineInfo: $("engineInfo"),
     progress: $("progress"), steps: $("steps"), bar: $("bar"), status: $("status"),
-    error: $("error"), result: $("result"), resultTitle: $("resultTitle"), resultMeta: $("resultMeta"),
+    error: $("error"), result: $("result"), resultTitle: $("resultTitle"),
+    resultPath: $("resultPath"), resultMeta: $("resultMeta"), editBtn: $("editBtn"),
     notesView: $("notesView"), transcriptView: $("transcriptView"),
     tabNotes: $("tabNotes"), tabTranscript: $("tabTranscript"),
     copyBtn: $("copyBtn"), downloadBtn: $("downloadBtn"), regenBtn: $("regenBtn"),
-    historyList: $("historyList"), historySection: $("historySection"),
+    librarySection: $("librarySection"), library: $("library"), librarySearch: $("librarySearch"),
+    exportBtn: $("exportBtn"), importInput: $("importInput"),
+    editDialog: $("editDialog"), editForm: $("editForm"), editTitle: $("editTitle"),
+    editSubject: $("editSubject"), editTopic: $("editTopic"), topicOptions: $("topicOptions"),
   };
 
   function saveSettings() {
@@ -74,16 +82,18 @@
   }
 
   const ENGINE_LABEL = { elevenlabs: "ElevenLabs Scribe v2", openai: "OpenAI gpt-transcribe" };
+  const subjectLabel = (id) => (SUBJECTS[id] ? `${SUBJECTS[id].icon} ${SUBJECTS[id].label}` : "📄 Ostatní");
 
   /* ---------- Subject picker ---------- */
   function renderSubjects() {
     el.subjects.innerHTML = "";
-    for (const [id, s] of Object.entries(SUBJECTS)) {
+    const options = [["auto", "✨ Auto-detect"], ...Object.entries(SUBJECTS).map(([id, s]) => [id, `${s.icon} ${s.label}`])];
+    for (const [id, label] of options) {
       const b = document.createElement("button");
       b.type = "button";
       b.setAttribute("role", "radio");
       b.setAttribute("aria-checked", String(settings.subject === id));
-      b.textContent = `${s.icon} ${s.label}`;
+      b.textContent = label;
       b.addEventListener("click", () => {
         if (busy) return;
         settings.subject = id;
@@ -189,18 +199,20 @@
   }
 
   /* ---------- Transcription ---------- */
-  function termsFor(subjectId) {
+  // subject may be "auto" (first audio part, before the subject is known)
+  function termsFor(subject) {
     const extra = (settings.extraTerms || "").split(/[,;\n]/).map((t) => t.trim()).filter(Boolean);
-    const all = [...extra, ...SUBJECTS[subjectId].terms];
-    return [...new Set(all)].filter((t) => t.length <= 50).slice(0, 100);
+    const base = SUBJECTS[subject] ? SUBJECTS[subject].terms : AUTO_TERMS();
+    return [...new Set([...extra, ...base])].filter((t) => t.length <= 50).slice(0, 100);
   }
+  const contextFor = (subject) => (SUBJECTS[subject] ? SUBJECTS[subject].context : AUTO_CONTEXT);
 
   const unsupported = { openaiKeywords: false, elevenKeyterms: false };
 
   async function transcribeOpenAI(chunk, previousText, subject) {
     const useKeywords = !unsupported.openaiKeywords;
     const terms = termsFor(subject);
-    let prompt = SUBJECTS[subject].context;
+    let prompt = contextFor(subject);
     if (!useKeywords) prompt += "\nPojmy: " + terms.join(", ");
     if (previousText) prompt += "\n\n" + previousText.slice(-400);
     try {
@@ -289,7 +301,7 @@
     }
   }
 
-  /* ---------- Notes ---------- */
+  /* ---------- OpenAI text generation ---------- */
   function extractResponsesText(data) {
     if (typeof data.output_text === "string") return data.output_text;
     return (data.output || [])
@@ -299,16 +311,14 @@
       .join("");
   }
 
-  async function writeNotes(transcript, subject, model) {
-    const system = BASE_NOTES_PROMPT(SUBJECTS[subject]);
-    const user = "Přepis hodiny:\n\n" + transcript;
+  async function generateText(model, system, user, label) {
     const auth = { Authorization: "Bearer " + settings.openaiKey, "Content-Type": "application/json" };
     try {
       const data = await apiFetch("openai", "https://api.openai.com/v1/chat/completions", () => ({
         method: "POST",
         headers: auth,
         body: JSON.stringify({ model, messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
-      }), "Writing notes");
+      }), label);
       return data.choices[0].message.content.trim();
     } catch (e) {
       // Some newer models are only available through the Responses API
@@ -317,11 +327,56 @@
           method: "POST",
           headers: auth,
           body: JSON.stringify({ model, instructions: system, input: user }),
-        }), "Writing notes");
+        }), label);
         return extractResponsesText(data).trim();
       }
       throw e;
     }
+  }
+
+  const stripDiacritics = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+  async function classifySubject(sample, model) {
+    const answer = stripDiacritics((await generateText(model, CLASSIFY_PROMPT, sample.slice(0, 6000), "Detecting subject")).toLowerCase());
+    return Object.keys(SUBJECTS).find((id) => answer.includes(id)) || null;
+  }
+
+  function topicsFor(subject) {
+    return [...new Set(lessons.filter((l) => l.subject === subject && l.topic && l.topic !== UNSORTED).map((l) => l.topic))].sort();
+  }
+
+  // Reuse an existing topic name when it only differs in case/diacritics/spacing
+  function canonicalTopic(subject, topic) {
+    const norm = (s) => stripDiacritics(s).toLowerCase().replace(/\s+/g, " ").trim();
+    return topicsFor(subject).find((t) => norm(t) === norm(topic)) || topic;
+  }
+
+  function parseNotes(raw) {
+    const lines = raw.replace(/^```[a-z]*\n/i, "").split("\n");
+    let topic = "", title = "", sep = -1;
+    for (let i = 0; i < Math.min(lines.length, 12); i++) {
+      const line = lines[i].trim().replace(/^\*\*|\*\*$/g, "");
+      const t = /^T[EÉ]MA\s*:\s*(.+)$/i.exec(line);
+      const n = /^N[AÁ]ZEV\s*:\s*(.+)$/i.exec(line);
+      if (t) topic = t[1].trim();
+      else if (n) title = n[1].trim();
+      else if (/^-{3,}$/.test(line) && (topic || title)) { sep = i; break; }
+    }
+    const notes = (sep >= 0 ? lines.slice(sep + 1) : lines).join("\n").trim();
+    if (!title) {
+      const h = /^#\s+(.+)$/m.exec(notes);
+      if (h) title = h[1].trim();
+    }
+    const clean = (s) => s.replace(/^["„“']+|["“”']+$/g, "").trim();
+    return { topic: clean(topic), title: clean(title), notes };
+  }
+
+  async function writeNotes(transcript, subject, model) {
+    const raw = await generateText(model, BASE_NOTES_PROMPT(SUBJECTS[subject], topicsFor(subject)),
+      "Přepis hodiny:\n\n" + transcript, "Writing notes");
+    const parsed = parseNotes(raw);
+    parsed.topic = parsed.topic ? canonicalTopic(subject, parsed.topic) : UNSORTED;
+    return parsed;
   }
 
   /* ---------- Progress UI ---------- */
@@ -363,7 +418,7 @@
       el.settingsBtn.click();
       return;
     }
-    const subject = settings.subject;
+    let subject = settings.subject;
     busy = true;
     el.drop.classList.add("disabled");
     el.progress.hidden = false;
@@ -380,11 +435,11 @@
       if (!chunks.length) throw new Error("No audio was found in this file.");
       const totalSec = chunks.reduce((s, c) => s + c.durationSec, 0);
       const price = PRICE_PER_MIN[engine] * (totalSec / 60);
-      el.status.textContent =
-        `${SUBJECTS[subject].label} · audio ${fmtMin(totalSec)} · ${chunks.length} part(s) · ` +
-        `${ENGINE_LABEL[engine]} ≈ $${price.toFixed(2)}`;
+      const statusBase = `Audio ${fmtMin(totalSec)} · ${chunks.length} part(s) · ${ENGINE_LABEL[engine]} ≈ $${price.toFixed(2)}`;
+      el.status.textContent = statusBase;
 
-      // 2. Transcription
+      // 2. Transcription (first part decides the subject when on auto)
+      const model = await resolveNotesModel();
       const texts = [];
       for (let i = 0; i < chunks.length; i++) {
         setStep(1, `Transcribing (${ENGINE_LABEL[engine]}) – part ${i + 1} of ${chunks.length}`,
@@ -392,24 +447,31 @@
         texts.push(engine === "elevenlabs"
           ? await transcribeEleven(chunks[i], subject)
           : await transcribeOpenAI(chunks[i], texts[i - 1], subject));
+        if (i === 0 && subject === "auto") {
+          setStep(1, "Detecting the subject…", 0.25 + 0.55 / chunks.length);
+          subject = (await classifySubject(texts[0], model)) || "biologie";
+          el.status.textContent = `${SUBJECTS[subject].label} (auto) · ${statusBase}`;
+        }
       }
+      if (!el.status.textContent.includes("(auto)")) el.status.textContent = `${SUBJECTS[subject].label} · ${statusBase}`;
       const transcript = texts.join("\n\n");
       current = {
         id: Date.now().toString(36),
         title: file.name.replace(/\.[^.]+$/, ""),
-        subject, engine,
+        fileName: file.name,
+        subject, topic: UNSORTED, engine,
         date: new Date().toISOString(),
         transcript,
         notes: "",
       };
       renderResult();
 
-      // 3. Notes
-      const model = await resolveNotesModel();
+      // 3. Notes + title + topic folder
       setStep(2, `Writing study notes (${model})`, 0.85);
-      current.notesModel = model;
-      current.notes = await writeNotes(transcript, subject, model);
-      saveCurrent();
+      const out = await writeNotes(transcript, subject, model);
+      Object.assign(current, { notes: out.notes, topic: out.topic, notesModel: model });
+      if (out.title) current.title = out.title;
+      await saveCurrent();
       renderResult();
       setStep(3, null, 1);
       el.status.textContent += " · Done ✓";
@@ -425,7 +487,7 @@
       }
       showError(msg);
       if (current && current.transcript && !current.notes) {
-        saveCurrent();
+        await saveCurrent();
         el.status.textContent = "The transcript is saved. Use “Regenerate notes” to try the notes again.";
       }
     } finally {
@@ -455,9 +517,9 @@
     if (!current) { el.result.hidden = true; return; }
     el.result.hidden = false;
     el.resultTitle.textContent = current.title;
-    const subj = SUBJECTS[current.subject];
+    el.resultPath.textContent = `${subjectLabel(current.subject)} › 📁 ${current.topic || UNSORTED}`;
     el.resultMeta.textContent = [
-      subj ? `${subj.icon} ${subj.label}` : "",
+      new Date(current.date).toLocaleDateString(),
       current.engine ? ENGINE_LABEL[current.engine] : "",
       current.notesModel || "",
     ].filter(Boolean).join(" · ");
@@ -496,13 +558,17 @@
   el.downloadBtn.addEventListener("click", () => {
     if (!current) return;
     const isNotes = activeTab === "notes";
-    const blob = new Blob([currentText()], { type: isNotes ? "text/markdown" : "text/plain" });
+    downloadFile(current.title + (isNotes ? " – zápisky.md" : " – přepis.txt"), currentText(),
+      isNotes ? "text/markdown" : "text/plain");
+  });
+
+  function downloadFile(name, text, type) {
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = current.title + (isNotes ? " – zápisky.md" : " – přepis.txt");
+    a.href = URL.createObjectURL(new Blob([text], { type }));
+    a.download = name.replace(/[\\/:*?"<>|]+/g, "-");
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  });
+  }
 
   el.regenBtn.addEventListener("click", async () => {
     if (!current || busy) return;
@@ -513,9 +579,15 @@
     el.regenBtn.textContent = "Writing…";
     try {
       const model = await resolveNotesModel();
-      current.notesModel = model;
-      current.notes = await writeNotes(current.transcript, current.subject || settings.subject, model);
-      saveCurrent();
+      const subject = SUBJECTS[current.subject] ? current.subject
+        : (await classifySubject(current.transcript, model)) || "biologie";
+      const out = await writeNotes(current.transcript, subject, model);
+      Object.assign(current, { subject, notes: out.notes, notesModel: model });
+      if (!current.topic || current.topic === UNSORTED) current.topic = out.topic;
+      if (out.title && (!current.title || current.title === (current.fileName || "").replace(/\.[^.]+$/, ""))) {
+        current.title = out.title;
+      }
+      await saveCurrent();
       setTab("notes");
       renderResult();
     } catch (e) {
@@ -533,41 +605,163 @@
     setTimeout(() => { btn.textContent = old; }, 1500);
   }
 
-  /* ---------- History ---------- */
-  function saveCurrent() {
-    history = [current, ...history.filter((h) => h.id !== current.id)].slice(0, 30);
-    while (history.length && !store.set("tv.history", history)) history.pop();
-    renderHistory();
+  /* ---------- Edit (move to another subject/topic, rename) ---------- */
+  el.editBtn.addEventListener("click", () => {
+    if (!current) return;
+    el.editTitle.value = current.title;
+    el.editSubject.innerHTML = Object.entries(SUBJECTS)
+      .map(([id, s]) => `<option value="${id}">${s.icon} ${s.label}</option>`).join("");
+    el.editSubject.value = SUBJECTS[current.subject] ? current.subject : "biologie";
+    el.editTopic.value = current.topic === UNSORTED ? "" : current.topic || "";
+    fillTopicOptions();
+    el.editDialog.showModal();
+  });
+
+  function fillTopicOptions() {
+    el.topicOptions.innerHTML = topicsFor(el.editSubject.value)
+      .map((t) => `<option value="${t.replace(/"/g, "&quot;")}"></option>`).join("");
+  }
+  el.editSubject.addEventListener("change", fillTopicOptions);
+
+  el.editForm.addEventListener("submit", async (e) => {
+    if (e.submitter && e.submitter.value === "cancel") return;
+    const subject = el.editSubject.value;
+    current.title = el.editTitle.value.trim() || current.title;
+    current.subject = subject;
+    const topic = el.editTopic.value.trim();
+    current.topic = topic ? canonicalTopic(subject, topic) : UNSORTED;
+    renderResult();
+    await saveCurrent();
+  });
+
+  /* ---------- Library ---------- */
+  async function saveCurrent() {
+    try {
+      await LessonDB.put(current);
+    } catch (e) {
+      showError("Could not save the lesson in this browser: " + e.message);
+    }
+    lessons = [current, ...lessons.filter((l) => l.id !== current.id)];
+    renderLibrary();
   }
 
-  function renderHistory() {
-    el.historySection.hidden = !history.length;
-    el.historyList.innerHTML = "";
-    for (const h of history) {
-      const li = document.createElement("li");
-      const open = document.createElement("button");
-      open.className = "link";
-      const subj = SUBJECTS[h.subject];
-      open.textContent = (subj ? subj.icon + " " : "") + h.title;
-      open.addEventListener("click", () => {
-        current = h; renderResult(); el.result.scrollIntoView({ behavior: "smooth" });
-      });
-      const date = document.createElement("span");
-      date.className = "muted small";
-      date.textContent = new Date(h.date).toLocaleDateString();
-      const del = document.createElement("button");
-      del.className = "icon";
-      del.title = "Remove from history";
-      del.textContent = "✕";
-      del.addEventListener("click", () => {
-        if (!confirm(`Remove “${h.title}” from history?`)) return;
-        history = history.filter((x) => x.id !== h.id);
-        store.set("tv.history", history);
-        renderHistory();
-      });
-      li.append(open, date, del);
-      el.historyList.append(li);
+  const groupState = new Map(); // key -> open (user toggles survive re-renders)
+
+  function matches(l, q) {
+    if (!q) return true;
+    const hay = stripDiacritics(`${l.title} ${l.topic} ${l.notes}`).toLowerCase();
+    return stripDiacritics(q).toLowerCase().split(/\s+/).every((w) => hay.includes(w));
+  }
+
+  function groupDetails(key, summaryHtml, defaultOpen) {
+    const d = document.createElement("details");
+    d.open = groupState.has(key) ? groupState.get(key) : defaultOpen;
+    d.innerHTML = `<summary>${summaryHtml}</summary>`;
+    d.addEventListener("toggle", () => groupState.set(key, d.open));
+    return d;
+  }
+
+  const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  function renderLibrary() {
+    el.librarySection.hidden = !lessons.length;
+    el.library.innerHTML = "";
+    const q = el.librarySearch.value.trim();
+    const visible = lessons.filter((l) => matches(l, q));
+    if (!visible.length) {
+      el.library.innerHTML = '<p class="muted small">Nothing found.</p>';
+      return;
     }
+    const subjectIds = [...Object.keys(SUBJECTS), "other"];
+    for (const sid of subjectIds) {
+      const inSubject = visible.filter((l) => (SUBJECTS[l.subject] ? l.subject : "other") === sid);
+      if (!inSubject.length) continue;
+      const sd = groupDetails("s:" + sid,
+        `${subjectLabel(sid)} <span class="count">${inSubject.length}</span>`, true);
+      sd.className = "lib-subject";
+      const topics = [...new Set(inSubject.map((l) => l.topic || UNSORTED))]
+        .sort((a, b) => (a === UNSORTED) - (b === UNSORTED) || a.localeCompare(b, "cs"));
+      for (const topic of topics) {
+        const items = inSubject.filter((l) => (l.topic || UNSORTED) === topic)
+          .sort((a, b) => a.date.localeCompare(b.date));
+        const td = groupDetails(`t:${sid}:${topic}`,
+          `📁 ${escapeHtml(topic)} <span class="count">${items.length}</span>`,
+          !!q || (current && current.subject === sid && current.topic === topic));
+        td.className = "lib-topic";
+        const ul = document.createElement("ul");
+        ul.className = "lessons";
+        for (const l of items) ul.append(lessonItem(l));
+        td.append(ul);
+        sd.append(td);
+      }
+      el.library.append(sd);
+    }
+  }
+
+  function lessonItem(l) {
+    const li = document.createElement("li");
+    if (current && current.id === l.id) li.classList.add("current");
+    const open = document.createElement("button");
+    open.className = "link";
+    open.textContent = l.title;
+    open.title = l.title;
+    open.addEventListener("click", () => {
+      current = l; renderResult(); renderLibrary();
+      el.result.scrollIntoView({ behavior: "smooth" });
+    });
+    const date = document.createElement("span");
+    date.className = "muted small";
+    date.textContent = new Date(l.date).toLocaleDateString();
+    const del = document.createElement("button");
+    del.className = "icon";
+    del.title = "Delete lesson";
+    del.textContent = "✕";
+    del.addEventListener("click", async () => {
+      if (!confirm(`Delete “${l.title}”? This cannot be undone.`)) return;
+      await LessonDB.remove(l.id);
+      lessons = lessons.filter((x) => x.id !== l.id);
+      if (current && current.id === l.id) { current = null; renderResult(); }
+      renderLibrary();
+    });
+    li.append(open, date, del);
+    return li;
+  }
+
+  el.librarySearch.addEventListener("input", renderLibrary);
+
+  el.exportBtn.addEventListener("click", () => {
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadFile(`zapisky-zaloha-${stamp}.json`, JSON.stringify({ app: "lesson-notes", version: 1, lessons }, null, 1),
+      "application/json");
+  });
+
+  el.importInput.addEventListener("change", async () => {
+    const f = el.importInput.files[0];
+    el.importInput.value = "";
+    if (!f) return;
+    try {
+      const data = JSON.parse(await f.text());
+      const incoming = (data.lessons || []).filter((l) => l && l.id && typeof l.transcript === "string");
+      for (const l of incoming) await LessonDB.put(l);
+      lessons = await loadLessons();
+      renderLibrary();
+      alert(`Imported ${incoming.length} lesson(s).`);
+    } catch (e) {
+      showError("Import failed: " + e.message);
+    }
+  });
+
+  async function loadLessons() {
+    // One-time migration from the old localStorage history
+    const old = store.get("tv.history", null);
+    if (Array.isArray(old) && old.length) {
+      for (const l of old) {
+        await LessonDB.put(Object.assign({ topic: UNSORTED }, l, { subject: SUBJECTS[l.subject] ? l.subject : "other" }));
+      }
+      store.remove("tv.history");
+    }
+    const all = await LessonDB.all();
+    return all.sort((a, b) => b.date.localeCompare(a.date));
   }
 
   /* ---------- File input ---------- */
@@ -624,9 +818,12 @@
 
   /* ---------- Init ---------- */
   importKeysFromHash();
-  if (!SUBJECTS[settings.subject]) settings.subject = DEFAULTS.subject;
+  if (settings.subject !== "auto" && !SUBJECTS[settings.subject]) settings.subject = "auto";
   renderSubjects();
   refreshInfo();
-  renderHistory();
-  if (history[0]) { current = history[0]; renderResult(); }
+  loadLessons().then((all) => {
+    lessons = all;
+    renderLibrary();
+    if (lessons[0] && !current) { current = lessons[0]; renderResult(); renderLibrary(); }
+  }).catch((e) => showError("Could not load saved lessons: " + e.message));
 })();

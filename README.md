@@ -13,7 +13,9 @@ A small static web app that turns recorded Czech lessons into a transcript and s
    - **OpenAI `gpt-transcribe`**: requests send `language=cs`, the subject context as `prompt`, the terms as `keywords`, and the end of the previous part so the text stays continuous.
    - If either API rejects the term field, the request is retried without it.
 4. **Study notes**: written by an OpenAI model. *Auto* picks the strongest general GPT model the key can access via `/v1/models`, skipping mini, nano and luna tiers and the expensive pro and astra tiers. A specific model can also be chosen in Settings. Requests use Chat Completions and fall back to the Responses API if needed. The notes follow subject-specific rules from `subjects.js`: formulas and equations in chemistry, quantities with units in physics, comparison tables and genetics crosses in biology, and Czech + Latin anatomical names in somatology. Every set of notes ends with key points and 5 admission-test-style multiple-choice questions with answers.
-5. **Result**: shown on the page, with copy (it pastes cleanly into Notion) and download buttons. Recent lessons are kept in the browser's local storage.
+5. **Auto-detect subject** (default): the first audio part is transcribed with a mixed term list (25 terms from each subject). A short GPT call then classifies the subject, and the remaining parts use that subject's terms. A subject can also be picked manually.
+6. **Title and folder**: the notes model also returns a lesson title (`<Main topic> – <specific content>`) and a topic folder. It is given the subject's existing folders so names stay consistent, and near-duplicate folder names are merged automatically.
+7. **Library**: lessons are stored in IndexedDB and shown as Subject → Topic folder → Lessons, with search, edit (rename or move to another subject/folder), delete, and JSON export/import for backups. Notes can be copied (they paste cleanly into Notion) or downloaded.
 
 ## Setup
 

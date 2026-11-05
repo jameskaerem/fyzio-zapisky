@@ -139,10 +139,10 @@ input, select, textarea {
   border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; width: 100%;
 }
 textarea { resize: vertical; font-size: 0.875rem; }
-details { display: flex; flex-direction: column; gap: 12px; }
-details[open] summary { margin-bottom: 12px; }
-details > label { margin-bottom: 12px; }
-summary { cursor: pointer; color: var(--muted); }
+dialog details { display: flex; flex-direction: column; gap: 12px; }
+dialog details[open] summary { margin-bottom: 12px; }
+dialog details > label { margin-bottom: 12px; }
+dialog summary { cursor: pointer; color: var(--muted); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 .subject-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -154,3 +154,34 @@ summary { cursor: pointer; color: var(--muted); }
 #loadModels { align-self: flex-start; }
 .notice.ok { border-color: var(--example-border); background: var(--example); }
 #copySetupLink { align-self: flex-start; }
+
+.result-path { margin: 0 0 4px; color: var(--accent); font-weight: 600; }
+.title-row { align-items: flex-start; }
+.title-row h2 { margin-bottom: 4px; }
+.small-btn { padding: 4px 10px; font-size: 0.875rem; flex-shrink: 0; }
+.library-head { margin-bottom: 12px; flex-wrap: wrap; }
+.library-head h2 { margin: 0; }
+.button-like {
+  display: inline-block; border: 1px solid var(--border); border-radius: 8px; padding: 7px 14px;
+  cursor: pointer; color: var(--text);
+}
+#librarySearch { margin-bottom: 12px; }
+.library details { margin: 4px 0; }
+.library summary { cursor: pointer; padding: 6px 4px; border-radius: 6px; list-style-position: inside; }
+.library summary:hover { background: var(--bg); }
+.lib-subject > summary { font-weight: 700; font-size: 1.02rem; }
+.lib-topic { margin-left: 10px; padding-left: 10px; border-left: 2px solid var(--border); }
+.lib-topic > summary { font-weight: 600; }
+.count {
+  display: inline-block; min-width: 1.6em; padding: 0 6px; margin-left: 6px; border-radius: 999px;
+  background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+  font-size: 0.75rem; font-weight: 600; text-align: center;
+}
+.lessons { list-style: none; margin: 0 0 6px 22px; padding: 0; }
+.lessons li { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-top: 1px solid var(--border); }
+.lessons li.current { background: var(--callout); border-radius: 6px; }
+.lessons li .link { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 520px) {
+  .lib-topic { margin-left: 6px; padding-left: 8px; }
+  .lessons { margin-left: 4px; }
+}
