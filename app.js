@@ -50,6 +50,7 @@
     settingsDialog: $("settingsDialog"), settingsBtn: $("settingsBtn"), settingsForm: $("settingsForm"),
     openaiKey: $("openaiKey"), elevenKey: $("elevenKey"), engine: $("engine"), notesModel: $("notesModel"),
     loadModels: $("loadModels"), extraTerms: $("extraTerms"),
+    copySetupLink: $("copySetupLink"), setupNotice: $("setupNotice"),
     keyWarning: $("keyWarning"), subjects: $("subjects"), drop: $("drop"), fileInput: $("fileInput"),
     engineInfo: $("engineInfo"),
     progress: $("progress"), steps: $("steps"), bar: $("bar"), status: $("status"),
@@ -587,7 +588,42 @@
     if (busy) { e.preventDefault(); e.returnValue = ""; }
   });
 
+  /* ---------- Setup link: #openai=…&eleven=… ----------
+   * The URL fragment is never sent to the web server. Keys from it are saved
+   * to this browser and the fragment is removed from the address bar/history. */
+  function importKeysFromHash() {
+    if (!location.hash || location.hash.length < 2) return;
+    const params = new URLSearchParams(location.hash.slice(1));
+    const openai = (params.get("openai") || "").trim();
+    const eleven = (params.get("eleven") || "").trim();
+    if (!openai && !eleven) return;
+    if (openai) settings.openaiKey = openai;
+    if (eleven) settings.elevenKey = eleven;
+    saveSettings();
+    window.history.replaceState(null, "", location.pathname + location.search);
+    el.setupNotice.hidden = false;
+  }
+
+  function buildSetupLink() {
+    const p = new URLSearchParams();
+    const o = el.openaiKey.value.trim(), e = el.elevenKey.value.trim();
+    if (o) p.set("openai", o);
+    if (e) p.set("eleven", e);
+    return location.origin + location.pathname + "#" + p.toString();
+  }
+
+  el.copySetupLink.addEventListener("click", async () => {
+    if (!el.openaiKey.value.trim()) { alert("Enter the OpenAI API key first."); return; }
+    try {
+      await navigator.clipboard.writeText(buildSetupLink());
+      flash(el.copySetupLink, "Link copied ✓");
+    } catch {
+      prompt("Copy this setup link:", buildSetupLink());
+    }
+  });
+
   /* ---------- Init ---------- */
+  importKeysFromHash();
   if (!SUBJECTS[settings.subject]) settings.subject = DEFAULTS.subject;
   renderSubjects();
   refreshInfo();

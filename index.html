@@ -21,6 +21,10 @@
       First, add your OpenAI API key. <button type="button" class="link">Open Settings</button>
     </div>
 
+    <div id="setupNotice" class="notice ok" hidden>
+      ✓ API keys are saved in this browser. You don't need to enter them again.
+    </div>
+
     <div class="subject-row">
       <span class="muted small">Subject</span>
       <div id="subjects" class="subjects" role="radiogroup" aria-label="Subject"></div>
@@ -78,6 +82,8 @@
         <input id="elevenKey" type="password" autocomplete="off" placeholder="sk_…" spellcheck="false">
       </label>
       <p class="muted small">Keys are stored only in this browser and sent only to api.openai.com / api.elevenlabs.io.</p>
+      <button id="copySetupLink" type="button" class="ghost">Copy setup link for another device</button>
+      <p class="muted small">Opening the link saves these keys in that browser. Share it only privately – anyone with the link can use your credit.</p>
       <label>Transcription
         <select id="engine">
           <option value="auto">Auto – ElevenLabs if its key is set, otherwise OpenAI</option>

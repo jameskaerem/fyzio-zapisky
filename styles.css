@@ -152,3 +152,5 @@ summary { cursor: pointer; color: var(--muted); }
 .engine-info { margin: -12px 0 20px; text-align: center; }
 .result-meta { margin: -8px 0 14px; }
 #loadModels { align-self: flex-start; }
+.notice.ok { border-color: var(--example-border); background: var(--example); }
+#copySetupLink { align-self: flex-start; }

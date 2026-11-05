@@ -19,6 +19,7 @@ A small static web app that turns recorded Czech lessons into a transcript and s
 
 - No build step and no backend. The app is plain HTML/CSS/JS, and its libraries are vendored in `vendor/` (mp4box.js 0.5.2, marked 12.0.2, DOMPurify 3.1.6).
 - Open the page, go to **Settings**, and paste an OpenAI API key (required) and, optionally, an ElevenLabs API key. The keys are stored only in that browser's `localStorage` and are sent only to the respective APIs.
+- **Setup link:** Settings → *Copy setup link* creates `https://…/#openai=…&eleven=…`. Opening it saves the keys in that browser and removes them from the address bar. The URL fragment is never sent to the web server and the keys are never stored in the repository. Share the link only privately.
 - Subject presets (context, up to 100 key terms each, and notes rules) live in `subjects.js`.
 - Use a dedicated OpenAI project key with a monthly hard limit.
 - Recommended browser: Chrome or Edge on desktop. Large non-MP4 files can run out of memory, especially on phones.
