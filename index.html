@@ -70,9 +70,8 @@
       <p class="muted small">Stored only in this browser and sent only to api.openai.com.</p>
       <label>Transcription model
         <select id="transcribeModel">
-          <option value="gpt-4o-transcribe">gpt-4o-transcribe (best, ≈ $0.36 / hour)</option>
-          <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe (cheaper, ≈ $0.18 / hour)</option>
-          <option value="whisper-1">whisper-1 (classic Whisper)</option>
+          <option value="gpt-transcribe">gpt-transcribe (recommended, ≈ $0.27 / hour)</option>
+          <option value="gpt-4o-transcribe">gpt-4o-transcribe (older, deprecated)</option>
         </select>
       </label>
       <label>Notes model
@@ -80,7 +79,10 @@
       </label>
       <details>
         <summary>Advanced: prompts</summary>
-        <label>Vocabulary hint for transcription
+        <label>What the recording is about (transcription context)
+          <textarea id="context" rows="3"></textarea>
+        </label>
+        <label>Key terms (comma-separated)
           <textarea id="glossary" rows="6"></textarea>
         </label>
         <label>Instructions for the study notes

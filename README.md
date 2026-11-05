@@ -8,7 +8,7 @@ A small static web app that turns a recorded Czech chemistry lesson into a trans
 2. **Local audio extraction**: the browser pulls out the audio track and converts it to 16 kHz mono WAV in parts of about 10 minutes (about 19 MB each, under OpenAI's 25 MB limit). Each cut is placed at the quietest moment near the boundary.
    - MP4/MOV/M4A files use a streaming path: mp4box.js and WebCodecs read only the audio samples, so multi-GB videos work.
    - Other formats (WebM, MP3, …) use `decodeAudioData` and are loaded into memory whole.
-3. **Transcription**: OpenAI `gpt-4o-transcribe` (configurable). It is called with `language=cs` and a Czech chemistry vocabulary prompt, plus the end of the previous part so the text stays continuous across parts.
+3. **Transcription**: OpenAI `gpt-transcribe` (configurable). It is called with `language=cs`, a short description of the recording, chemistry terms as `keywords`, and the end of the previous part so the text stays continuous across parts. If the API rejects `keywords`, the terms are moved into the prompt instead.
 4. **Study notes**: `gpt-4o-mini` (configurable) rewrites the transcript as Markdown with headings, callouts (💡 key, ⚠️ warning, 🧪 example), formulas with proper subscripts, step-by-step calculations, key points and review questions.
 5. **Result**: shown on the page, with copy (it pastes cleanly into Notion) and download buttons. Recent lessons are kept in the browser's local storage.
 
@@ -19,7 +19,7 @@ A small static web app that turns a recorded Czech chemistry lesson into a trans
 - Use a dedicated OpenAI project key with a monthly hard limit.
 - Recommended browser: Chrome or Edge on desktop. Large non-MP4 files can run out of memory, especially on phones.
 
-Approximate cost: about $0.36 per hour of audio with `gpt-4o-transcribe`, plus a fraction of a cent for the notes.
+Approximate cost: about $0.27 per hour of audio with `gpt-transcribe`, plus a fraction of a cent for the notes.
 
 ## Deployment
 

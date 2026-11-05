@@ -2,16 +2,22 @@
   "use strict";
 
   /* ---------- Defaults ---------- */
-  const DEFAULT_GLOSSARY =
-    "Hodina chemie v češtině. Odborné názvosloví: oxidační číslo, oxid, hydroxid, kyselina, sůl, " +
-    "bezkyslíkatá a kyslíkatá kyselina, kyselina sírová H2SO4, kyselina siřičitá H2SO3, kyselina chlorovodíková HCl, " +
-    "kyselina dusičná HNO3, kyselina fosforečná H3PO4, kyselina uhličitá H2CO3, hydroxid sodný NaOH, " +
-    "hydroxid draselný KOH, hydroxid vápenatý Ca(OH)2, voda H2O, peroxid vodíku H2O2, oxid uhličitý CO2, " +
-    "oxid siřičitý SO2, chlorid sodný NaCl, síran měďnatý CuSO4, uhličitan vápenatý CaCO3, amoniak NH3, " +
-    "mol, molární hmotnost, látkové množství, hmotnostní zlomek, molární koncentrace, pH, neutralizace, " +
-    "redoxní reakce, oxidace, redukce, elektronegativita, valenční elektrony, kation, anion, katalyzátor, " +
-    "vodík, kyslík, uhlík, dusík, síra, chlor, sodík, draslík, vápník, hořčík, železo, měď, zinek. " +
-    "Koncovky oxidačních čísel: -ný, -natý, -itý, -ičitý, -ečný, -ičný, -ový, -istý, -ičelý.";
+  const DEFAULT_CONTEXT =
+    "Nahrávka výukové hodiny chemie na české střední škole. Učitel vysvětluje chemické názvosloví, " +
+    "vzorce, rovnice a výpočty. Vzorce často čte po písmenech a číslech, např. „há dva es o čtyři“ (H2SO4).";
+
+  // Literal terms passed as keywords (gpt-transcribe) or appended to the prompt (older models)
+  const DEFAULT_GLOSSARY = [
+    "oxidační číslo", "oxid", "hydroxid", "kyselina", "sůl", "bezkyslíkatá kyselina", "kyslíkatá kyselina",
+    "kyselina sírová", "kyselina siřičitá", "kyselina chlorovodíková", "kyselina dusičná",
+    "kyselina fosforečná", "kyselina uhličitá", "hydroxid sodný", "hydroxid draselný", "hydroxid vápenatý",
+    "peroxid vodíku", "oxid uhličitý", "oxid siřičitý", "chlorid sodný", "síran měďnatý",
+    "uhličitan vápenatý", "amoniak", "H2SO4", "HCl", "HNO3", "H3PO4", "NaOH", "KOH", "Ca(OH)2", "H2O",
+    "CO2", "NaCl", "CuSO4", "NH3", "mol", "molární hmotnost", "látkové množství", "hmotnostní zlomek",
+    "molární koncentrace", "pH", "neutralizace", "redoxní reakce", "oxidace", "redukce",
+    "elektronegativita", "valenční elektrony", "kation", "anion", "katalyzátor",
+    "-natý", "-itý", "-ičitý", "-ečný", "-ičný", "-istý", "-ičelý",
+  ].join(", ");
 
   const DEFAULT_NOTES_PROMPT = `Jsi pečlivý asistent pro studium chemie. Dostaneš automatický přepis české výukové hodiny chemie. Vytvoř z něj přehledné studijní zápisky v češtině ve formátu Markdown.
 
@@ -29,13 +35,15 @@ Pravidla:
 
   const DEFAULTS = {
     apiKey: "",
-    transcribeModel: "gpt-4o-transcribe",
+    transcribeModel: "gpt-transcribe",
     notesModel: "gpt-4o-mini",
+    context: DEFAULT_CONTEXT,
     glossary: DEFAULT_GLOSSARY,
     notesPrompt: DEFAULT_NOTES_PROMPT,
   };
 
-  const PRICE_PER_MIN = { "gpt-4o-transcribe": 0.006, "gpt-4o-mini-transcribe": 0.003, "whisper-1": 0.006 };
+  const PRICE_PER_MIN = { "gpt-transcribe": 0.0045, "gpt-4o-transcribe": 0.006 };
+  const SETTINGS_VERSION = 2;
 
   /* ---------- Storage (best effort) ---------- */
   const store = {
@@ -48,7 +56,12 @@ Pravidla:
     },
   };
 
-  let settings = Object.assign({}, DEFAULTS, store.get("tv.settings", {}));
+  const saved = store.get("tv.settings", {});
+  if (saved.v !== SETTINGS_VERSION) {
+    // v1 used gpt-4o-transcribe and a single prompt text; start from the new defaults
+    delete saved.transcribeModel; delete saved.glossary; delete saved.context;
+  }
+  let settings = Object.assign({}, DEFAULTS, saved, { v: SETTINGS_VERSION });
   let history = store.get("tv.history", []);
   let current = null; // { id, title, date, transcript, notes }
   let busy = false;
@@ -58,7 +71,7 @@ Pravidla:
   const el = {
     settingsDialog: $("settingsDialog"), settingsBtn: $("settingsBtn"), settingsForm: $("settingsForm"),
     apiKey: $("apiKey"), transcribeModel: $("transcribeModel"), notesModel: $("notesModel"),
-    glossary: $("glossary"), notesPrompt: $("notesPrompt"), resetPrompts: $("resetPrompts"),
+    context: $("context"), glossary: $("glossary"), notesPrompt: $("notesPrompt"), resetPrompts: $("resetPrompts"),
     keyWarning: $("keyWarning"), drop: $("drop"), fileInput: $("fileInput"),
     progress: $("progress"), steps: $("steps"), bar: $("bar"), status: $("status"),
     error: $("error"), result: $("result"), resultTitle: $("resultTitle"),
@@ -73,6 +86,7 @@ Pravidla:
     el.apiKey.value = settings.apiKey;
     el.transcribeModel.value = settings.transcribeModel;
     el.notesModel.value = settings.notesModel;
+    el.context.value = settings.context;
     el.glossary.value = settings.glossary;
     el.notesPrompt.value = settings.notesPrompt;
   }
@@ -83,15 +97,18 @@ Pravidla:
 
   el.settingsBtn.addEventListener("click", () => { fillSettingsForm(); el.settingsDialog.showModal(); });
   el.resetPrompts.addEventListener("click", () => {
+    el.context.value = DEFAULT_CONTEXT;
     el.glossary.value = DEFAULT_GLOSSARY;
     el.notesPrompt.value = DEFAULT_NOTES_PROMPT;
   });
   el.settingsForm.addEventListener("submit", (e) => {
     if (e.submitter && e.submitter.value === "cancel") return;
     settings = {
+      v: SETTINGS_VERSION,
       apiKey: el.apiKey.value.trim(),
       transcribeModel: el.transcribeModel.value,
       notesModel: el.notesModel.value.trim() || DEFAULTS.notesModel,
+      context: el.context.value.trim(),
       glossary: el.glossary.value.trim(),
       notesPrompt: el.notesPrompt.value.trim() || DEFAULT_NOTES_PROMPT,
     };
@@ -128,19 +145,39 @@ Pravidla:
     throw lastErr;
   }
 
+  let keywordsUnsupported = false;
+
+  function glossaryTerms() {
+    return (settings.glossary || "").split(/[,;\n]/).map((t) => t.trim()).filter(Boolean).slice(0, 100);
+  }
+
   async function transcribeChunk(chunk, previousText) {
-    let prompt = settings.glossary || "";
+    const useKeywords = settings.transcribeModel === "gpt-transcribe" && !keywordsUnsupported;
+    let prompt = settings.context || "";
+    if (!useKeywords && settings.glossary) prompt += "\nPojmy: " + settings.glossary;
     if (previousText) prompt += "\n\n" + previousText.slice(-400);
-    const data = await openaiFetch("/audio/transcriptions", () => {
-      const fd = new FormData();
-      fd.append("file", chunk.blob, "audio.wav");
-      fd.append("model", settings.transcribeModel);
-      fd.append("language", "cs");
-      fd.append("response_format", "json");
-      if (prompt) fd.append("prompt", prompt);
-      return { method: "POST", headers: { Authorization: "Bearer " + settings.apiKey }, body: fd };
-    }, "Transcription");
-    return (data.text || "").trim();
+    const terms = useKeywords ? glossaryTerms() : [];
+    try {
+      const data = await openaiFetch("/audio/transcriptions", () => {
+        const fd = new FormData();
+        fd.append("file", chunk.blob, "audio.wav");
+        fd.append("model", settings.transcribeModel);
+        fd.append("language", "cs");
+        fd.append("response_format", "json");
+        if (prompt) fd.append("prompt", prompt);
+        for (const t of terms) fd.append("keywords[]", t);
+        return { method: "POST", headers: { Authorization: "Bearer " + settings.apiKey }, body: fd };
+      }, "Transcription");
+      return (data.text || "").trim();
+    } catch (e) {
+      // If the API rejects the keywords field, fall back to putting the terms into the prompt
+      if (useKeywords && /keyword/i.test(e.message)) {
+        console.warn("Keywords rejected, retrying with prompt only:", e.message);
+        keywordsUnsupported = true;
+        return transcribeChunk(chunk, previousText);
+      }
+      throw e;
+    }
   }
 
   async function writeNotes(transcript) {
