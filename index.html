@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Lesson Notes</title>
-  <meta name="description" content="Turn a recorded chemistry lesson into a transcript and structured study notes.">
+  <meta name="description" content="Turn recorded lessons into transcripts and structured study notes for physiotherapy admission prep.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="top">
     <div class="wrap row">
-      <h1>🧪 Lesson Notes</h1>
+      <h1>🩺 Lesson Notes</h1>
       <button id="settingsBtn" class="ghost" type="button">⚙ Settings</button>
     </div>
   </header>
@@ -21,12 +21,18 @@
       First, add your OpenAI API key. <button type="button" class="link">Open Settings</button>
     </div>
 
+    <div class="subject-row">
+      <span class="muted small">Subject</span>
+      <div id="subjects" class="subjects" role="radiogroup" aria-label="Subject"></div>
+    </div>
+
     <label id="drop" class="drop">
       <input id="fileInput" type="file" accept="video/*,audio/*">
       <strong>Drop a lesson video here</strong>
       <span>or click to choose a file · MP4, MOV, WebM, MP3, M4A…</span>
       <span class="muted small">The video stays on this device. Only a small audio file is sent for transcription.</span>
     </label>
+    <p id="engineInfo" class="muted small engine-info"></p>
 
     <section id="progress" class="card" hidden>
       <ol id="steps" class="steps"></ol>
@@ -38,6 +44,7 @@
 
     <section id="result" class="card" hidden>
       <h2 id="resultTitle"></h2>
+      <p id="resultMeta" class="muted small result-meta"></p>
       <div class="toolbar">
         <div class="tabs" role="tablist">
           <button id="tabNotes" role="tab" type="button" aria-selected="true">Notes</button>
@@ -64,31 +71,29 @@
   <dialog id="settingsDialog">
     <form id="settingsForm" method="dialog">
       <h2>Settings</h2>
-      <label>OpenAI API key
-        <input id="apiKey" type="password" autocomplete="off" placeholder="sk-…" spellcheck="false">
+      <label>OpenAI API key <span class="muted">(required – writes the study notes)</span>
+        <input id="openaiKey" type="password" autocomplete="off" placeholder="sk-…" spellcheck="false">
       </label>
-      <p class="muted small">Stored only in this browser and sent only to api.openai.com.</p>
-      <label>Transcription model
-        <select id="transcribeModel">
-          <option value="gpt-transcribe">gpt-transcribe (recommended, ≈ $0.27 / hour)</option>
-          <option value="gpt-4o-transcribe">gpt-4o-transcribe (older, deprecated)</option>
+      <label>ElevenLabs API key <span class="muted">(optional – most accurate transcription)</span>
+        <input id="elevenKey" type="password" autocomplete="off" placeholder="sk_…" spellcheck="false">
+      </label>
+      <p class="muted small">Keys are stored only in this browser and sent only to api.openai.com / api.elevenlabs.io.</p>
+      <label>Transcription
+        <select id="engine">
+          <option value="auto">Auto – ElevenLabs if its key is set, otherwise OpenAI</option>
+          <option value="elevenlabs">ElevenLabs Scribe v2 (≈ $0.27 / hour)</option>
+          <option value="openai">OpenAI gpt-transcribe (≈ $0.27 / hour)</option>
         </select>
       </label>
-      <label>Notes model
-        <input id="notesModel" type="text" spellcheck="false">
+      <label>Study notes model (OpenAI)
+        <select id="notesModel"></select>
       </label>
+      <button id="loadModels" type="button" class="ghost">Load my models</button>
       <details>
-        <summary>Advanced: prompts</summary>
-        <label>What the recording is about (transcription context)
-          <textarea id="context" rows="3"></textarea>
+        <summary>Advanced</summary>
+        <label>Extra key terms for transcription (comma-separated, added to every subject)
+          <textarea id="extraTerms" rows="3" placeholder="e.g. teacher's name, specific terms from your course"></textarea>
         </label>
-        <label>Key terms (comma-separated)
-          <textarea id="glossary" rows="6"></textarea>
-        </label>
-        <label>Instructions for the study notes
-          <textarea id="notesPrompt" rows="10"></textarea>
-        </label>
-        <button id="resetPrompts" type="button" class="ghost">Reset prompts to default</button>
       </details>
       <div class="dialog-actions">
         <button type="submit" value="cancel" class="ghost" formnovalidate>Cancel</button>
@@ -100,6 +105,7 @@
   <script src="vendor/mp4box.all.min.js"></script>
   <script src="vendor/marked.min.js"></script>
   <script src="vendor/purify.min.js"></script>
+  <script src="subjects.js"></script>
   <script src="audio.js"></script>
   <script src="app.js"></script>
 </body>

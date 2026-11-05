@@ -1,6 +1,6 @@
 # Lesson Notes
 
-A small static web app that turns a recorded Czech chemistry lesson into a transcript and structured study notes.
+A small static web app that turns recorded Czech lessons into a transcript and structured study notes. It is tuned for university physiotherapy admission prep in four subjects: chemistry, physics, biology and somatology (human anatomy and physiology).
 
 ## How it works
 
@@ -8,18 +8,22 @@ A small static web app that turns a recorded Czech chemistry lesson into a trans
 2. **Local audio extraction**: the browser pulls out the audio track and converts it to 16 kHz mono WAV in parts of about 10 minutes (about 19 MB each, under OpenAI's 25 MB limit). Each cut is placed at the quietest moment near the boundary.
    - MP4/MOV/M4A files use a streaming path: mp4box.js and WebCodecs read only the audio samples, so multi-GB videos work.
    - Other formats (WebM, MP3, …) use `decodeAudioData` and are loaded into memory whole.
-3. **Transcription**: OpenAI `gpt-transcribe` (configurable). It is called with `language=cs`, a short description of the recording, chemistry terms as `keywords`, and the end of the previous part so the text stays continuous across parts. If the API rejects `keywords`, the terms are moved into the prompt instead.
-4. **Study notes**: `gpt-4o-mini` (configurable) rewrites the transcript as Markdown with headings, callouts (💡 key, ⚠️ warning, 🧪 example), formulas with proper subscripts, step-by-step calculations, key points and review questions.
+3. **Transcription**, with one of two engines:
+   - **ElevenLabs Scribe v2** (`scribe_v2`): used automatically when an ElevenLabs key is set. It currently leads public STT accuracy leaderboards. Requests send `language_code=cs` and the subject's terms as `keyterms`.
+   - **OpenAI `gpt-transcribe`**: requests send `language=cs`, the subject context as `prompt`, the terms as `keywords`, and the end of the previous part so the text stays continuous.
+   - If either API rejects the term field, the request is retried without it.
+4. **Study notes**: written by an OpenAI model. *Auto* picks the strongest general GPT model the key can access via `/v1/models`, skipping mini, nano and luna tiers and the expensive pro and astra tiers. A specific model can also be chosen in Settings. Requests use Chat Completions and fall back to the Responses API if needed. The notes follow subject-specific rules from `subjects.js`: formulas and equations in chemistry, quantities with units in physics, comparison tables and genetics crosses in biology, and Czech + Latin anatomical names in somatology. Every set of notes ends with key points and 5 admission-test-style multiple-choice questions with answers.
 5. **Result**: shown on the page, with copy (it pastes cleanly into Notion) and download buttons. Recent lessons are kept in the browser's local storage.
 
 ## Setup
 
 - No build step and no backend. The app is plain HTML/CSS/JS, and its libraries are vendored in `vendor/` (mp4box.js 0.5.2, marked 12.0.2, DOMPurify 3.1.6).
-- Open the page, go to **Settings**, and paste an OpenAI API key. The key is stored only in that browser's `localStorage` and is sent only to `api.openai.com`.
+- Open the page, go to **Settings**, and paste an OpenAI API key (required) and, optionally, an ElevenLabs API key. The keys are stored only in that browser's `localStorage` and are sent only to the respective APIs.
+- Subject presets (context, up to 100 key terms each, and notes rules) live in `subjects.js`.
 - Use a dedicated OpenAI project key with a monthly hard limit.
 - Recommended browser: Chrome or Edge on desktop. Large non-MP4 files can run out of memory, especially on phones.
 
-Approximate cost: about $0.27 per hour of audio with `gpt-transcribe`, plus a fraction of a cent for the notes.
+Approximate cost per hour of audio: ElevenLabs Scribe v2 about $0.22, plus $0.05 for keyterm prompting; OpenAI `gpt-transcribe` about $0.27. Notes cost a few cents per lesson, depending on the model.
 
 ## Deployment
 

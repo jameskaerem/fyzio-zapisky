@@ -144,3 +144,11 @@ details[open] summary { margin-bottom: 12px; }
 details > label { margin-bottom: 12px; }
 summary { cursor: pointer; color: var(--muted); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+.subject-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.subjects { display: flex; flex-wrap: wrap; gap: 8px; }
+.subjects button { background: var(--surface); color: var(--text); border-color: var(--border); border-radius: 999px; }
+.subjects button[aria-checked="true"] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.engine-info { margin: -12px 0 20px; text-align: center; }
+.result-meta { margin: -8px 0 14px; }
+#loadModels { align-self: flex-start; }
