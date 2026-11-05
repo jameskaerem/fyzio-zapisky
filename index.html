@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson Notes</title>
+  <meta name="description" content="Turn a recorded chemistry lesson into a transcript and structured study notes.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap row">
+      <h1>🧪 Lesson Notes</h1>
+      <button id="settingsBtn" class="ghost" type="button">⚙ Settings</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div id="keyWarning" class="notice" hidden>
+      First, add your OpenAI API key. <button type="button" class="link">Open Settings</button>
+    </div>
+
+    <label id="drop" class="drop">
+      <input id="fileInput" type="file" accept="video/*,audio/*">
+      <strong>Drop a lesson video here</strong>
+      <span>or click to choose a file · MP4, MOV, WebM, MP3, M4A…</span>
+      <span class="muted small">The video stays on this device. Only a small audio file is sent for transcription.</span>
+    </label>
+
+    <section id="progress" class="card" hidden>
+      <ol id="steps" class="steps"></ol>
+      <div class="track"><div id="bar" class="bar"></div></div>
+      <p id="status" class="muted small"></p>
+    </section>
+
+    <p id="error" class="error" role="alert" hidden></p>
+
+    <section id="result" class="card" hidden>
+      <h2 id="resultTitle"></h2>
+      <div class="toolbar">
+        <div class="tabs" role="tablist">
+          <button id="tabNotes" role="tab" type="button" aria-selected="true">Notes</button>
+          <button id="tabTranscript" role="tab" type="button" aria-selected="false">Transcript</button>
+        </div>
+        <div class="actions">
+          <button id="copyBtn" type="button">Copy notes (Markdown)</button>
+          <button id="downloadBtn" type="button" class="ghost">Download</button>
+          <button id="regenBtn" type="button" class="ghost">Regenerate notes</button>
+        </div>
+      </div>
+      <article id="notesView" class="notes"></article>
+      <pre id="transcriptView" class="transcript" hidden></pre>
+      <p class="muted small">Tip: “Copy notes” and paste into Notion – headings and lists keep their formatting.</p>
+    </section>
+
+    <section id="historySection" class="card" hidden>
+      <h2>Earlier lessons</h2>
+      <p class="muted small">Saved only in this browser.</p>
+      <ul id="historyList" class="history"></ul>
+    </section>
+  </main>
+
+  <dialog id="settingsDialog">
+    <form id="settingsForm" method="dialog">
+      <h2>Settings</h2>
+      <label>OpenAI API key
+        <input id="apiKey" type="password" autocomplete="off" placeholder="sk-…" spellcheck="false">
+      </label>
+      <p class="muted small">Stored only in this browser and sent only to api.openai.com.</p>
+      <label>Transcription model
+        <select id="transcribeModel">
+          <option value="gpt-4o-transcribe">gpt-4o-transcribe (best, ≈ $0.36 / hour)</option>
+          <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe (cheaper, ≈ $0.18 / hour)</option>
+          <option value="whisper-1">whisper-1 (classic Whisper)</option>
+        </select>
+      </label>
+      <label>Notes model
+        <input id="notesModel" type="text" spellcheck="false">
+      </label>
+      <details>
+        <summary>Advanced: prompts</summary>
+        <label>Vocabulary hint for transcription
+          <textarea id="glossary" rows="6"></textarea>
+        </label>
+        <label>Instructions for the study notes
+          <textarea id="notesPrompt" rows="10"></textarea>
+        </label>
+        <button id="resetPrompts" type="button" class="ghost">Reset prompts to default</button>
+      </details>
+      <div class="dialog-actions">
+        <button type="submit" value="cancel" class="ghost" formnovalidate>Cancel</button>
+        <button type="submit" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="vendor/mp4box.all.min.js"></script>
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/purify.min.js"></script>
+  <script src="audio.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
