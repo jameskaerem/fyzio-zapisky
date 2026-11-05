@@ -16,6 +16,10 @@ A small static web app that turns recorded Czech lessons into a transcript and s
 5. **Auto-detect subject** (default): the first audio part is transcribed with a mixed term list (25 terms from each subject). A short GPT call then classifies the subject, and the remaining parts use that subject's terms. A subject can also be picked manually.
 6. **Title and folder**: the notes model also returns a lesson title (`<Main topic> – <specific content>`) and a topic folder. It is given the subject's existing folders so names stay consistent, and near-duplicate folder names are merged automatically.
 7. **Library**: lessons are stored in IndexedDB and shown as Subject → Topic folder → Lessons, with search, edit (rename or move to another subject/folder), delete, and JSON export/import for backups. Notes can be copied (they paste cleanly into Notion) or downloaded.
+8. **Own notes**: separate from the AI output and visually distinct (pink, ✍️):
+   - **My notes on a lesson**: personal notes added under the AI notes, each with a timestamp, editable and deletable. They are included, clearly marked, when the notes are copied or downloaded.
+   - **Own note**: a standalone note written from scratch (Markdown), filed into a subject and topic folder like any lesson.
+   - In the library, ✍️ marks an own note and 📝 marks a lesson with personal notes. Search covers both.
 
 ## Setup
 

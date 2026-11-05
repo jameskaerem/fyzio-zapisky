@@ -67,6 +67,10 @@
     exportBtn: $("exportBtn"), importInput: $("importInput"),
     editDialog: $("editDialog"), editForm: $("editForm"), editTitle: $("editTitle"),
     editSubject: $("editSubject"), editTopic: $("editTopic"), topicOptions: $("topicOptions"),
+    editHeading: $("editHeading"), editContentWrap: $("editContentWrap"), editContent: $("editContent"),
+    newNoteBtn: $("newNoteBtn"), newNoteBtn2: $("newNoteBtn2"), ownBadge: $("ownBadge"), tabs: $("tabs"),
+    myNotes: $("myNotes"), annotationList: $("annotationList"), annotationForm: $("annotationForm"),
+    annotationText: $("annotationText"),
   };
 
   function saveSettings() {
@@ -523,12 +527,89 @@
       current.engine ? ENGINE_LABEL[current.engine] : "",
       current.notesModel || "",
     ].filter(Boolean).join(" · ");
+    const own = current.kind === "note";
+    el.ownBadge.hidden = !own;
+    el.tabs.hidden = own;
+    el.regenBtn.hidden = own;
+    if (own) {
+      el.resultMeta.textContent = new Date(current.date).toLocaleDateString() +
+        (current.updated ? ` · edited ${new Date(current.updated).toLocaleDateString()}` : "");
+    }
+    el.notesView.classList.toggle("own", own);
     el.notesView.innerHTML = current.notes
       ? renderMarkdown(current.notes)
-      : '<p class="muted">Study notes are not ready yet…</p>';
-    el.transcriptView.textContent = current.transcript;
+      : `<p class="muted">${own ? "Empty note – use ✎ Edit to write it." : "Study notes are not ready yet…"}</p>`;
+    el.transcriptView.textContent = current.transcript || "";
     el.regenBtn.disabled = !current.transcript;
-    setTab(activeTab);
+    renderAnnotations();
+    setTab(own ? "notes" : activeTab);
+  }
+
+  /* ---------- Personal notes attached to a lesson ---------- */
+  const fmtDateTime = (iso) => new Date(iso).toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+
+  function renderAnnotations() {
+    const list = current.annotations || [];
+    el.myNotes.hidden = current.kind === "note";
+    el.annotationList.innerHTML = "";
+    for (const a of list) {
+      const box = document.createElement("div");
+      box.className = "annotation";
+      const head = document.createElement("div");
+      head.className = "annotation-head";
+      head.innerHTML = `<span>✍️ My note · ${fmtDateTime(a.date)}${a.updated ? " (edited)" : ""}</span>`;
+      const edit = document.createElement("button");
+      edit.className = "icon"; edit.type = "button"; edit.title = "Edit note"; edit.textContent = "✎";
+      const del = document.createElement("button");
+      del.className = "icon"; del.type = "button"; del.title = "Delete note"; del.textContent = "✕";
+      head.append(edit, del);
+      const body = document.createElement("div");
+      body.className = "annotation-body";
+      body.innerHTML = renderMarkdown(a.text);
+      edit.addEventListener("click", () => {
+        const ta = document.createElement("textarea");
+        ta.rows = Math.max(3, a.text.split("\n").length + 1);
+        ta.value = a.text;
+        const save = document.createElement("button");
+        save.type = "button"; save.textContent = "Save";
+        save.addEventListener("click", async () => {
+          const text = ta.value.trim();
+          if (!text) return;
+          Object.assign(a, { text, updated: new Date().toISOString() });
+          await saveCurrent();
+          renderAnnotations();
+        });
+        body.replaceChildren(ta, save);
+        ta.focus();
+      });
+      del.addEventListener("click", async () => {
+        if (!confirm("Delete this note?")) return;
+        current.annotations = list.filter((x) => x !== a);
+        await saveCurrent();
+        renderAnnotations();
+      });
+      box.append(head, body);
+      el.annotationList.append(box);
+    }
+  }
+
+  el.annotationForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = el.annotationText.value.trim();
+    if (!text || !current) return;
+    current.annotations = [...(current.annotations || []),
+      { id: Date.now().toString(36), text, date: new Date().toISOString() }];
+    el.annotationText.value = "";
+    await saveCurrent();
+    renderAnnotations();
+  });
+
+  // Markdown for copy/download: AI notes followed by her own notes, clearly marked
+  function notesWithAnnotations(l) {
+    const list = l.annotations || [];
+    if (!list.length) return l.notes;
+    const mine = list.map((a) => `> ✍️ **Moje poznámka (${fmtDateTime(a.date)}):**\n> ${a.text.replace(/\n/g, "\n> ")}`).join("\n\n");
+    return `${l.notes}\n\n## ✍️ Moje poznámky\n\n${mine}`;
   }
 
   function setTab(tab) {
@@ -537,13 +618,14 @@
     el.tabTranscript.setAttribute("aria-selected", String(tab === "transcript"));
     el.notesView.hidden = tab !== "notes";
     el.transcriptView.hidden = tab !== "transcript";
+    el.myNotes.classList.toggle("hidden-tab", tab !== "notes");
     el.copyBtn.textContent = tab === "notes" ? "Copy notes (Markdown)" : "Copy transcript";
   }
 
   el.tabNotes.addEventListener("click", () => setTab("notes"));
   el.tabTranscript.addEventListener("click", () => setTab("transcript"));
 
-  const currentText = () => (activeTab === "notes" ? current.notes : current.transcript);
+  const currentText = () => (activeTab === "notes" ? notesWithAnnotations(current) : current.transcript);
 
   el.copyBtn.addEventListener("click", async () => {
     if (!current) return;
@@ -558,7 +640,8 @@
   el.downloadBtn.addEventListener("click", () => {
     if (!current) return;
     const isNotes = activeTab === "notes";
-    downloadFile(current.title + (isNotes ? " – zápisky.md" : " – přepis.txt"), currentText(),
+    const suffix = current.kind === "note" ? " – můj zápis.md" : isNotes ? " – zápisky.md" : " – přepis.txt";
+    downloadFile(current.title + suffix, currentText(),
       isNotes ? "text/markdown" : "text/plain");
   });
 
@@ -606,16 +689,31 @@
   }
 
   /* ---------- Edit (move to another subject/topic, rename) ---------- */
-  el.editBtn.addEventListener("click", () => {
-    if (!current) return;
-    el.editTitle.value = current.title;
+  let editMode = "edit"; // edit | new
+
+  function openEditDialog(mode) {
+    editMode = mode;
+    const isNew = mode === "new";
+    const target = isNew ? null : current;
+    el.editHeading.textContent = isNew ? "✍️ New note" : target.kind === "note" ? "✍️ Edit my note" : "Edit lesson";
+    el.editTitle.value = isNew ? "" : target.title;
     el.editSubject.innerHTML = Object.entries(SUBJECTS)
       .map(([id, s]) => `<option value="${id}">${s.icon} ${s.label}</option>`).join("");
-    el.editSubject.value = SUBJECTS[current.subject] ? current.subject : "biologie";
-    el.editTopic.value = current.topic === UNSORTED ? "" : current.topic || "";
+    const subj = isNew ? (SUBJECTS[settings.subject] ? settings.subject : current && SUBJECTS[current.subject] ? current.subject : "biologie")
+      : SUBJECTS[target.subject] ? target.subject : "biologie";
+    el.editSubject.value = subj;
+    el.editTopic.value = isNew ? (current && current.subject === subj && current.topic !== UNSORTED ? current.topic : "")
+      : target.topic === UNSORTED ? "" : target.topic || "";
+    const showContent = isNew || target.kind === "note";
+    el.editContentWrap.hidden = !showContent;
+    el.editContent.value = isNew ? "" : showContent ? target.notes : "";
     fillTopicOptions();
     el.editDialog.showModal();
-  });
+  }
+
+  el.editBtn.addEventListener("click", () => { if (current) openEditDialog("edit"); });
+  el.newNoteBtn.addEventListener("click", () => openEditDialog("new"));
+  el.newNoteBtn2.addEventListener("click", () => openEditDialog("new"));
 
   function fillTopicOptions() {
     el.topicOptions.innerHTML = topicsFor(el.editSubject.value)
@@ -626,12 +724,27 @@
   el.editForm.addEventListener("submit", async (e) => {
     if (e.submitter && e.submitter.value === "cancel") return;
     const subject = el.editSubject.value;
-    current.title = el.editTitle.value.trim() || current.title;
-    current.subject = subject;
-    const topic = el.editTopic.value.trim();
-    current.topic = topic ? canonicalTopic(subject, topic) : UNSORTED;
+    const topicInput = el.editTopic.value.trim();
+    const topic = topicInput ? canonicalTopic(subject, topicInput) : UNSORTED;
+    if (editMode === "new") {
+      const now = new Date().toISOString();
+      current = {
+        id: Date.now().toString(36), kind: "note",
+        title: el.editTitle.value.trim() || "Můj zápis",
+        subject, topic, date: now, transcript: "", notes: el.editContent.value.trim(),
+      };
+    } else {
+      current.title = el.editTitle.value.trim() || current.title;
+      current.subject = subject;
+      current.topic = topic;
+      if (current.kind === "note") {
+        current.notes = el.editContent.value.trim();
+        current.updated = new Date().toISOString();
+      }
+    }
     renderResult();
     await saveCurrent();
+    el.result.scrollIntoView({ behavior: "smooth" });
   });
 
   /* ---------- Library ---------- */
@@ -649,7 +762,8 @@
 
   function matches(l, q) {
     if (!q) return true;
-    const hay = stripDiacritics(`${l.title} ${l.topic} ${l.notes}`).toLowerCase();
+    const mine = (l.annotations || []).map((a) => a.text).join(" ");
+    const hay = stripDiacritics(`${l.title} ${l.topic} ${l.notes} ${mine}`).toLowerCase();
     return stripDiacritics(q).toLowerCase().split(/\s+/).every((w) => hay.includes(w));
   }
 
@@ -703,7 +817,8 @@
     if (current && current.id === l.id) li.classList.add("current");
     const open = document.createElement("button");
     open.className = "link";
-    open.textContent = l.title;
+    const marks = (l.kind === "note" ? "✍️ " : "") + ((l.annotations || []).length ? "📝 " : "");
+    open.textContent = marks + l.title;
     open.title = l.title;
     open.addEventListener("click", () => {
       current = l; renderResult(); renderLibrary();

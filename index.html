@@ -37,6 +37,9 @@
       <span class="muted small">The video stays on this device. Only a small audio file is sent for transcription.</span>
     </label>
     <p id="engineInfo" class="muted small engine-info"></p>
+    <div class="own-note-row">
+      <button id="newNoteBtn" type="button" class="ghost">✍️ Write my own note</button>
+    </div>
 
     <section id="progress" class="card" hidden>
       <ol id="steps" class="steps"></ol>
@@ -48,13 +51,14 @@
 
     <section id="result" class="card" hidden>
       <p id="resultPath" class="result-path small"></p>
+      <span id="ownBadge" class="own-badge" hidden>✍️ My own note</span>
       <div class="row title-row">
         <h2 id="resultTitle"></h2>
         <button id="editBtn" type="button" class="ghost small-btn" title="Rename or move to another folder">✎ Edit</button>
       </div>
       <p id="resultMeta" class="muted small result-meta"></p>
       <div class="toolbar">
-        <div class="tabs" role="tablist">
+        <div id="tabs" class="tabs" role="tablist">
           <button id="tabNotes" role="tab" type="button" aria-selected="true">Notes</button>
           <button id="tabTranscript" role="tab" type="button" aria-selected="false">Transcript</button>
         </div>
@@ -66,6 +70,14 @@
       </div>
       <article id="notesView" class="notes"></article>
       <pre id="transcriptView" class="transcript" hidden></pre>
+      <section id="myNotes" class="my-notes">
+        <h3>✍️ My notes</h3>
+        <div id="annotationList"></div>
+        <form id="annotationForm" class="annotation-form">
+          <textarea id="annotationText" rows="3" placeholder="Add your own note to this lesson… (Markdown works: **bold**, - lists)"></textarea>
+          <button type="submit">Add note</button>
+        </form>
+      </section>
       <p class="muted small">Tip: “Copy notes” and paste into Notion – headings and lists keep their formatting.</p>
     </section>
 
@@ -73,6 +85,7 @@
       <div class="row library-head">
         <h2>📚 Library</h2>
         <div class="actions">
+          <button id="newNoteBtn2" type="button" class="ghost">✍️ New note</button>
           <button id="exportBtn" type="button" class="ghost">Export backup</button>
           <label class="ghost button-like">Import<input id="importInput" type="file" accept="application/json,.json" hidden></label>
         </div>
@@ -121,7 +134,7 @@
 
   <dialog id="editDialog">
     <form id="editForm" method="dialog">
-      <h2>Edit lesson</h2>
+      <h2 id="editHeading">Edit lesson</h2>
       <label>Title
         <input id="editTitle" type="text" required>
       </label>
@@ -131,6 +144,9 @@
       <label>Folder (topic)
         <input id="editTopic" type="text" list="topicOptions" placeholder="Nezařazeno">
         <datalist id="topicOptions"></datalist>
+      </label>
+      <label id="editContentWrap" hidden>Note
+        <textarea id="editContent" rows="12" placeholder="Write your note… (Markdown works: # heading, **bold**, - list)"></textarea>
       </label>
       <div class="dialog-actions">
         <button type="submit" value="cancel" class="ghost" formnovalidate>Cancel</button>
