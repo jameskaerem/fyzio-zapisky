@@ -1172,6 +1172,7 @@
       if (libFilter === "all") {
         const sd = groupDetails("s:" + sid, `${subjectLabel(sid)} <span class="count">${inSubject.length}</span>`, true);
         sd.className = "lib-subject";
+        sd.dataset.subject = sid;
         el.library.append(sd);
         container = sd;
       }
@@ -1183,6 +1184,7 @@
         const td = groupDetails(`t:${sid}:${topic}`,
           `📁 ${escapeHtml(topic)} <span class="count">${items.length}</span>`, true);
         td.className = "lib-topic" + (libFilter === "all" ? "" : " flat");
+        td.dataset.subject = sid;
         const ul = document.createElement("ul");
         ul.className = "lessons";
         for (const l of items) ul.append(lessonItem(l));

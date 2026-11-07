@@ -398,6 +398,74 @@ details.section[open] > .section-body { animation: sec-in 0.35s ease; }
 .map-svg foreignObject div:hover { text-decoration: underline; text-underline-offset: 3px; }
 .map-preview { border: 0; box-shadow: 0 12px 40px rgba(0,0,0,0.25); border-left: 5px solid var(--subj); animation: sec-in 0.25s ease; }
 
+/* ===== Library cards (same style as the note sections) ===== */
+.library details { margin: 0; }
+.lib-subject {
+  --sec: var(--subj);
+  border-left: 5px solid var(--sec); border-radius: 14px; background: var(--surface);
+  box-shadow: var(--shadow); margin: 12px 0; overflow: hidden;
+}
+.library .lib-subject > summary, .library .lib-topic > summary {
+  list-style: none; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: background 0.25s;
+}
+.library summary::-webkit-details-marker { display: none; }
+.library .lib-subject > summary {
+  padding: 13px 16px; font-size: 1.06rem; font-weight: 700; border-radius: 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--sec) 16%, transparent), transparent 75%);
+}
+.library .lib-subject > summary:hover { background: linear-gradient(90deg, color-mix(in srgb, var(--sec) 26%, transparent), transparent 85%); }
+.lib-subject[open] > summary { border-bottom: 1px solid color-mix(in srgb, var(--sec) 20%, var(--border)); }
+.library .lib-subject > summary::after, .library .lib-topic > summary::after {
+  content: "›"; margin-left: auto; width: 26px; height: 26px; flex-shrink: 0;
+  display: grid; place-items: center; border-radius: 50%; font-size: 1.15rem; line-height: 1;
+  color: var(--sec, var(--accent)); background: color-mix(in srgb, var(--sec, var(--accent)) 14%, transparent);
+  transition: transform 0.3s ease;
+}
+.lib-subject[open] > summary::after, .lib-topic[open] > summary::after { transform: rotate(90deg); }
+
+.lib-topic {
+  --sec: var(--subj);
+  margin: 6px 10px; padding: 0; border: 0; border-radius: 12px;
+  background: color-mix(in srgb, var(--sec) 5%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sec) 14%, var(--border));
+}
+.lib-subject[open] > .lib-topic:last-child { margin-bottom: 12px; }
+.lib-topic.flat { margin: 10px 0; }
+.library .lib-topic > summary { padding: 10px 14px; font-weight: 600; border-radius: 12px; }
+.library .lib-topic > summary:hover { background: color-mix(in srgb, var(--sec) 10%, transparent); }
+.library .lib-topic > summary::after { width: 22px; height: 22px; font-size: 1rem; }
+.lib-topic .lessons { margin: 0; padding: 0 8px 8px; }
+.lib-topic .lessons li { margin-top: 2px; }
+.lib-topic .lessons li .link { color: var(--text); text-decoration: none; font-weight: 500; }
+.lib-topic .lessons li:hover .link { color: var(--sec); }
+.lib-topic .lessons li::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  background: color-mix(in srgb, var(--sec) 60%, transparent);
+}
+.lessons li.current { background: color-mix(in srgb, var(--sec, var(--accent)) 12%, transparent); }
+
+/* Smooth open/close + fade-in, like the note sections */
+.lib-subject::details-content, .lib-topic::details-content {
+  block-size: 0; overflow: clip;
+  transition: block-size 0.35s ease, content-visibility 0.35s allow-discrete;
+}
+.lib-subject[open]::details-content, .lib-topic[open]::details-content { block-size: auto; }
+.lib-subject[open] > :not(summary), .lib-topic[open] > :not(summary) { animation: sec-in 0.35s ease; }
+.lib-topic .lessons li { animation: sec-in 0.35s ease both; }
+.lib-topic .lessons li:nth-child(2) { animation-delay: 0.04s; }
+.lib-topic .lessons li:nth-child(3) { animation-delay: 0.08s; }
+.lib-topic .lessons li:nth-child(4) { animation-delay: 0.12s; }
+.lib-topic .lessons li:nth-child(n+5) { animation-delay: 0.16s; }
+@media (prefers-reduced-motion: reduce) {
+  .lib-subject::details-content, .lib-topic::details-content { transition: none; }
+  .lib-subject[open] > :not(summary), .lib-topic[open] > :not(summary), .lib-topic .lessons li { animation: none; }
+}
+
+/* Long lesson titles wrap to two lines instead of being cut off */
+.lib-topic .lessons li .link {
+  white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.35;
+}
+
 /* ===== Print / PDF ===== */
 @media print {
   :root { color-scheme: light; }
