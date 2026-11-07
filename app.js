@@ -75,23 +75,27 @@
 
   function saveSettings() {
     if (!store.set("tv.settings", settings)) {
-      showError("Settings could not be saved in this browser (private mode?). They will be lost on reload.");
+      showError("Nastavení se v tomto prohlížeči nepodařilo uložit (anonymní okno?). Po obnovení stránky se ztratí.");
     }
   }
 
+  // Primary engine: ElevenLabs when its key is set (OpenAI is the automatic fallback), unless "only OpenAI" is chosen
   function activeEngine() {
-    if (settings.engine === "elevenlabs") return "elevenlabs";
     if (settings.engine === "openai") return "openai";
     return settings.elevenKey ? "elevenlabs" : "openai";
   }
 
-  const ENGINE_LABEL = { elevenlabs: "ElevenLabs Scribe v2", openai: "OpenAI gpt-transcribe" };
+  const ENGINE_LABEL = {
+    elevenlabs: "ElevenLabs Scribe v2",
+    openai: "OpenAI gpt-transcribe",
+    fallback: "ElevenLabs → záložně OpenAI",
+  };
   const subjectLabel = (id) => (SUBJECTS[id] ? `${SUBJECTS[id].icon} ${SUBJECTS[id].label}` : "📄 Ostatní");
 
   /* ---------- Subject picker ---------- */
   function renderSubjects() {
     el.subjects.innerHTML = "";
-    const options = [["auto", "✨ Auto-detect"], ...Object.entries(SUBJECTS).map(([id, s]) => [id, `${s.icon} ${s.label}`])];
+    const options = [["auto", "✨ Rozpoznat automaticky"], ...Object.entries(SUBJECTS).map(([id, s]) => [id, `${s.icon} ${s.label}`])];
     for (const [id, label] of options) {
       const b = document.createElement("button");
       b.type = "button";
@@ -111,8 +115,9 @@
   function refreshInfo() {
     el.keyWarning.hidden = !!settings.openaiKey;
     const eng = activeEngine();
-    const notes = settings.notesModel === "auto" ? "best available GPT" : settings.notesModel;
-    el.engineInfo.textContent = `Transcription: ${ENGINE_LABEL[eng]} · Notes: ${notes}`;
+    const notes = settings.notesModel === "auto" ? "nejlepší dostupný GPT" : settings.notesModel;
+    const fb = eng === "elevenlabs" ? " (záloha OpenAI)" : "";
+    el.engineInfo.textContent = `Přepis: ${ENGINE_LABEL[eng]}${fb} · Zápisky: ${notes}`;
   }
 
   /* ---------- Settings dialog ---------- */
@@ -132,7 +137,7 @@
       o.value = value; o.textContent = label;
       el.notesModel.append(o);
     };
-    add("auto", auto ? `Auto – best available (${auto})` : "Auto – best available");
+    add("auto", auto ? `Automaticky – nejlepší dostupný (${auto})` : "Automaticky – nejlepší dostupný");
     const list = [...ids].sort();
     if (selected && selected !== "auto" && !list.includes(selected)) list.unshift(selected);
     for (const id of list) add(id, id);
@@ -144,9 +149,9 @@
 
   el.loadModels.addEventListener("click", async () => {
     const key = el.openaiKey.value.trim();
-    if (!key) { alert("Enter the OpenAI API key first."); return; }
+    if (!key) { alert("Nejdřív vlož OpenAI API klíč."); return; }
     el.loadModels.disabled = true;
-    el.loadModels.textContent = "Loading…";
+    el.loadModels.textContent = "Načítám…";
     try {
       const ids = await listOpenAIModels(key, true);
       setNotesModelOptions(ids, el.notesModel.value);
@@ -154,7 +159,7 @@
       alert(e.message);
     } finally {
       el.loadModels.disabled = false;
-      el.loadModels.textContent = "Load my models";
+      el.loadModels.textContent = "Načíst moje modely";
     }
   });
 
@@ -180,7 +185,7 @@
       try {
         res = await fetch(url, makeInit());
       } catch (e) {
-        lastErr = new Error(`${label}: network error (${e.message}).`);
+        lastErr = new Error(`${label}: chyba sítě (${e.message}).`);
         await new Promise((r) => setTimeout(r, 2000 * 2 ** attempt));
         continue;
       }
@@ -190,11 +195,11 @@
         const j = await res.json();
         detail = (j.error && j.error.message) || (j.detail && (j.detail.message || JSON.stringify(j.detail))) || "";
       } catch { /* ignore */ }
-      if (res.status === 401) throw new Error(`The ${name} API key is invalid or lacks permission. Check it in Settings. ${detail}`);
+      if (res.status === 401) throw new Error(`${name} API klíč je neplatný nebo nemá oprávnění. Zkontroluj ho v Nastavení. ${detail}`);
       if (res.status === 402 || /quota|billing|credits|insufficient/i.test(detail)) {
-        throw new Error(`${name} credit is used up (or the limit was reached). ${detail}`);
+        throw new Error(`${name}: kredit je vyčerpaný (nebo byl dosažen limit). ${detail}`);
       }
-      lastErr = new Error(`${label} failed (${res.status}): ${detail || res.statusText}`);
+      lastErr = new Error(`${label} selhal (${res.status}): ${detail || res.statusText}`);
       lastErr.status = res.status;
       if (res.status !== 429 && res.status < 500) throw lastErr;
       await new Promise((r) => setTimeout(r, 2000 * 2 ** attempt));
@@ -229,7 +234,7 @@
         fd.append("prompt", prompt);
         if (useKeywords) for (const t of terms) fd.append("keywords[]", t);
         return { method: "POST", headers: { Authorization: "Bearer " + settings.openaiKey }, body: fd };
-      }, "Transcription");
+      }, "Přepis");
       return (data.text || "").trim();
     } catch (e) {
       if (useKeywords && /keyword/i.test(e.message)) {
@@ -290,7 +295,7 @@
     const c = store.get("tv.models", null);
     if (!force && c && Date.now() - c.at < 24 * 3600 * 1000 && c.ids.length) return c.ids;
     const res = await fetch("https://api.openai.com/v1/models", { headers: { Authorization: "Bearer " + key } });
-    if (!res.ok) throw new Error(`Could not load OpenAI models (${res.status}). Check the API key.`);
+    if (!res.ok) throw new Error(`Nepodařilo se načíst modely OpenAI (${res.status}). Zkontroluj API klíč.`);
     const ids = (await res.json()).data.map((m) => m.id).filter((id) => /^(gpt|o\d)/i.test(id));
     store.set("tv.models", { at: Date.now(), ids });
     return ids;
@@ -341,7 +346,7 @@
   const stripDiacritics = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "");
 
   async function classifySubject(sample, model) {
-    const answer = stripDiacritics((await generateText(model, CLASSIFY_PROMPT, sample.slice(0, 6000), "Detecting subject")).toLowerCase());
+    const answer = stripDiacritics((await generateText(model, CLASSIFY_PROMPT, sample.slice(0, 6000), "Rozpoznání předmětu")).toLowerCase());
     return Object.keys(SUBJECTS).find((id) => answer.includes(id)) || null;
   }
 
@@ -377,14 +382,14 @@
 
   async function writeNotes(transcript, subject, model) {
     const raw = await generateText(model, BASE_NOTES_PROMPT(SUBJECTS[subject], topicsFor(subject)),
-      "Přepis hodiny:\n\n" + transcript, "Writing notes");
+      "Přepis hodiny:\n\n" + transcript, "Psaní zápisků");
     const parsed = parseNotes(raw);
     parsed.topic = parsed.topic ? canonicalTopic(subject, parsed.topic) : UNSORTED;
     return parsed;
   }
 
   /* ---------- Progress UI ---------- */
-  const STEP_LABELS = ["Extracting audio (on this device)", "Transcribing", "Writing study notes"];
+  const STEP_LABELS = ["Získávám zvuk (v tomto zařízení)", "Přepisuji", "Píšu zápisky"];
 
   function setStep(index, text, fraction) {
     [...el.steps.children].forEach((li, i) => {
@@ -415,10 +420,8 @@
     if (busy) return;
     showError("");
     const engine = activeEngine();
-    if (!settings.openaiKey || (engine === "elevenlabs" && !settings.elevenKey)) {
-      showError(!settings.openaiKey
-        ? "Add your OpenAI API key in Settings first (it is needed for the study notes)."
-        : "ElevenLabs is selected for transcription but no ElevenLabs API key is set.");
+    if (!settings.openaiKey) {
+      showError("Nejdřív vlož v Nastavení OpenAI API klíč (je potřeba pro zápisky).");
       el.settingsBtn.click();
       return;
     }
@@ -434,36 +437,51 @@
       // 1. Audio
       setStep(0, null, 0);
       const { chunks } = await AudioExtract.extractAudioChunks(file, (f) => {
-        setStep(0, `Extracting audio (on this device) – ${Math.round(f * 100)} %`, f * 0.25);
+        setStep(0, `Získávám zvuk (v tomto zařízení) – ${Math.round(f * 100)} %`, f * 0.25);
       });
-      if (!chunks.length) throw new Error("No audio was found in this file.");
+      if (!chunks.length) throw new Error("V souboru nebyl nalezen žádný zvuk.");
       const totalSec = chunks.reduce((s, c) => s + c.durationSec, 0);
       const price = PRICE_PER_MIN[engine] * (totalSec / 60);
-      const statusBase = `Audio ${fmtMin(totalSec)} · ${chunks.length} part(s) · ${ENGINE_LABEL[engine]} ≈ $${price.toFixed(2)}`;
+      const statusBase = `Zvuk ${fmtMin(totalSec)} · částí: ${chunks.length} · ${ENGINE_LABEL[engine]} ≈ $${price.toFixed(2)}`;
       el.status.textContent = statusBase;
 
       // 2. Transcription (first part decides the subject when on auto)
       const model = await resolveNotesModel();
       const texts = [];
+      let usedEngine = engine, fallbackReason = "";
       for (let i = 0; i < chunks.length; i++) {
-        setStep(1, `Transcribing (${ENGINE_LABEL[engine]}) – part ${i + 1} of ${chunks.length}`,
+        setStep(1, `Přepisuji (${ENGINE_LABEL[usedEngine]}) – část ${i + 1} z ${chunks.length}`,
           0.25 + (0.55 * i) / chunks.length);
-        texts.push(engine === "elevenlabs"
-          ? await transcribeEleven(chunks[i], subject)
-          : await transcribeOpenAI(chunks[i], texts[i - 1], subject));
+        let text;
+        if (usedEngine === "elevenlabs") {
+          try {
+            text = await transcribeEleven(chunks[i], subject);
+          } catch (err) {
+            // ElevenLabs failed (limit, credit, outage…): continue with OpenAI for this and the remaining parts
+            console.warn("ElevenLabs failed, falling back to OpenAI:", err);
+            usedEngine = "openai";
+            fallbackReason = err.message;
+            el.status.textContent = `⚠️ ElevenLabs selhal (${err.message.slice(0, 120)}) – pokračuji záložně přes OpenAI. · ${statusBase}`;
+            setStep(1, `Přepisuji (záložně OpenAI) – část ${i + 1} z ${chunks.length}`, 0.25 + (0.55 * i) / chunks.length);
+          }
+        }
+        if (text === undefined) text = await transcribeOpenAI(chunks[i], texts[i - 1], subject);
+        texts.push(text);
         if (i === 0 && subject === "auto") {
-          setStep(1, "Detecting the subject…", 0.25 + 0.55 / chunks.length);
+          setStep(1, "Rozpoznávám předmět…", 0.25 + 0.55 / chunks.length);
           subject = (await classifySubject(texts[0], model)) || "biologie";
-          el.status.textContent = `${SUBJECTS[subject].label} (auto) · ${statusBase}`;
         }
       }
-      if (!el.status.textContent.includes("(auto)")) el.status.textContent = `${SUBJECTS[subject].label} · ${statusBase}`;
+      setStep(1, `Přepis hotový (${ENGINE_LABEL[fallbackReason ? "fallback" : engine]})`, 0.8);
+      el.status.textContent = `${SUBJECTS[subject].label}${settings.subject === "auto" ? " (rozpoznáno)" : ""} · ${statusBase}` +
+        (fallbackReason ? " · ⚠️ ElevenLabs selhal, použit záložní OpenAI" : "");
       const transcript = texts.join("\n\n");
       current = {
         id: Date.now().toString(36),
         title: file.name.replace(/\.[^.]+$/, ""),
         fileName: file.name,
-        subject, topic: UNSORTED, engine,
+        subject, topic: UNSORTED,
+        engine: fallbackReason ? "fallback" : engine,
         date: new Date().toISOString(),
         transcript,
         notes: "",
@@ -471,28 +489,28 @@
       renderResult();
 
       // 3. Notes + title + topic folder
-      setStep(2, `Writing study notes (${model})`, 0.85);
+      setStep(2, `Píšu zápisky (${model})`, 0.85);
       const out = await writeNotes(transcript, subject, model);
       Object.assign(current, { notes: out.notes, topic: out.topic, notesModel: model });
       if (out.title) current.title = out.title;
       await saveCurrent();
       renderResult();
       setStep(3, null, 1);
-      el.status.textContent += " · Done ✓";
+      el.status.textContent += " · Hotovo ✓";
     } catch (e) {
       console.error(e);
       let msg = e && e.message ? e.message : String(e);
-      if (msg === "NO_AUDIO_TRACK") msg = "This video has no audio track.";
+      if (msg === "NO_AUDIO_TRACK") msg = "Toto video nemá zvukovou stopu.";
       if (msg === "DECODE_FAILED") {
-        msg = "This browser cannot read this file format. Try Chrome or Edge on a computer, or export the video as MP4.";
+        msg = "Tento prohlížeč neumí přečíst tento formát. Zkus Chrome nebo Edge na počítači, nebo video ulož jako MP4.";
       }
       if (/allocation|memory|Array buffer/i.test(msg)) {
-        msg = "The file is too big for this browser to open. Use Chrome or Edge on a computer, or upload an MP4.";
+        msg = "Soubor je pro tento prohlížeč moc velký. Použij Chrome nebo Edge na počítači, nebo nahraj MP4.";
       }
       showError(msg);
       if (current && current.transcript && !current.notes) {
         await saveCurrent();
-        el.status.textContent = "The transcript is saved. Use “Regenerate notes” to try the notes again.";
+        el.status.textContent = "Přepis je uložený. Zápisky můžeš zkusit znovu tlačítkem „Vytvořit zápisky znovu“.";
       }
     } finally {
       busy = false;
@@ -523,7 +541,7 @@
     el.resultTitle.textContent = current.title;
     el.resultPath.textContent = `${subjectLabel(current.subject)} › 📁 ${current.topic || UNSORTED}`;
     el.resultMeta.textContent = [
-      new Date(current.date).toLocaleDateString(),
+      new Date(current.date).toLocaleDateString("cs-CZ"),
       current.engine ? ENGINE_LABEL[current.engine] : "",
       current.notesModel || "",
     ].filter(Boolean).join(" · ");
@@ -532,13 +550,13 @@
     el.tabs.hidden = own;
     el.regenBtn.hidden = own;
     if (own) {
-      el.resultMeta.textContent = new Date(current.date).toLocaleDateString() +
-        (current.updated ? ` · edited ${new Date(current.updated).toLocaleDateString()}` : "");
+      el.resultMeta.textContent = new Date(current.date).toLocaleDateString("cs-CZ") +
+        (current.updated ? ` · upraveno ${new Date(current.updated).toLocaleDateString("cs-CZ")}` : "");
     }
     el.notesView.classList.toggle("own", own);
     el.notesView.innerHTML = current.notes
       ? renderMarkdown(current.notes)
-      : `<p class="muted">${own ? "Empty note – use ✎ Edit to write it." : "Study notes are not ready yet…"}</p>`;
+      : `<p class="muted">${own ? "Prázdný zápis – napiš ho přes ✎ Upravit." : "Zápisky se ještě připravují…"}</p>`;
     el.transcriptView.textContent = current.transcript || "";
     el.regenBtn.disabled = !current.transcript;
     renderAnnotations();
@@ -546,7 +564,7 @@
   }
 
   /* ---------- Personal notes attached to a lesson ---------- */
-  const fmtDateTime = (iso) => new Date(iso).toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+  const fmtDateTime = (iso) => new Date(iso).toLocaleString("cs-CZ", { dateStyle: "short", timeStyle: "short" });
 
   function renderAnnotations() {
     const list = current.annotations || [];
@@ -557,11 +575,11 @@
       box.className = "annotation";
       const head = document.createElement("div");
       head.className = "annotation-head";
-      head.innerHTML = `<span>✍️ My note · ${fmtDateTime(a.date)}${a.updated ? " (edited)" : ""}</span>`;
+      head.innerHTML = `<span>✍️ Moje poznámka · ${fmtDateTime(a.date)}${a.updated ? " (upraveno)" : ""}</span>`;
       const edit = document.createElement("button");
-      edit.className = "icon"; edit.type = "button"; edit.title = "Edit note"; edit.textContent = "✎";
+      edit.className = "icon"; edit.type = "button"; edit.title = "Upravit poznámku"; edit.textContent = "✎";
       const del = document.createElement("button");
-      del.className = "icon"; del.type = "button"; del.title = "Delete note"; del.textContent = "✕";
+      del.className = "icon"; del.type = "button"; del.title = "Smazat poznámku"; del.textContent = "✕";
       head.append(edit, del);
       const body = document.createElement("div");
       body.className = "annotation-body";
@@ -571,7 +589,7 @@
         ta.rows = Math.max(3, a.text.split("\n").length + 1);
         ta.value = a.text;
         const save = document.createElement("button");
-        save.type = "button"; save.textContent = "Save";
+        save.type = "button"; save.textContent = "Uložit";
         save.addEventListener("click", async () => {
           const text = ta.value.trim();
           if (!text) return;
@@ -583,7 +601,7 @@
         ta.focus();
       });
       del.addEventListener("click", async () => {
-        if (!confirm("Delete this note?")) return;
+        if (!confirm("Smazat tuto poznámku?")) return;
         current.annotations = list.filter((x) => x !== a);
         await saveCurrent();
         renderAnnotations();
@@ -619,7 +637,7 @@
     el.notesView.hidden = tab !== "notes";
     el.transcriptView.hidden = tab !== "transcript";
     el.myNotes.classList.toggle("hidden-tab", tab !== "notes");
-    el.copyBtn.textContent = tab === "notes" ? "Copy notes (Markdown)" : "Copy transcript";
+    el.copyBtn.textContent = tab === "notes" ? "Kopírovat zápisky" : "Kopírovat přepis";
   }
 
   el.tabNotes.addEventListener("click", () => setTab("notes"));
@@ -631,9 +649,9 @@
     if (!current) return;
     try {
       await navigator.clipboard.writeText(currentText());
-      flash(el.copyBtn, "Copied ✓");
+      flash(el.copyBtn, "Zkopírováno ✓");
     } catch {
-      showError("Copy failed – select the text and copy it manually.");
+      showError("Kopírování selhalo – označ text a zkopíruj ho ručně.");
     }
   });
 
@@ -659,7 +677,7 @@
     busy = true;
     showError("");
     el.regenBtn.disabled = true;
-    el.regenBtn.textContent = "Writing…";
+    el.regenBtn.textContent = "Píšu…";
     try {
       const model = await resolveNotesModel();
       const subject = SUBJECTS[current.subject] ? current.subject
@@ -678,7 +696,7 @@
     } finally {
       busy = false;
       el.regenBtn.disabled = false;
-      el.regenBtn.textContent = "Regenerate notes";
+      el.regenBtn.textContent = "Vytvořit zápisky znovu";
     }
   });
 
@@ -695,7 +713,7 @@
     editMode = mode;
     const isNew = mode === "new";
     const target = isNew ? null : current;
-    el.editHeading.textContent = isNew ? "✍️ New note" : target.kind === "note" ? "✍️ Edit my note" : "Edit lesson";
+    el.editHeading.textContent = isNew ? "✍️ Nový zápis" : target.kind === "note" ? "✍️ Upravit můj zápis" : "Upravit hodinu";
     el.editTitle.value = isNew ? "" : target.title;
     el.editSubject.innerHTML = Object.entries(SUBJECTS)
       .map(([id, s]) => `<option value="${id}">${s.icon} ${s.label}</option>`).join("");
@@ -752,7 +770,7 @@
     try {
       await LessonDB.put(current);
     } catch (e) {
-      showError("Could not save the lesson in this browser: " + e.message);
+      showError("Hodinu se v tomto prohlížeči nepodařilo uložit: " + e.message);
     }
     lessons = [current, ...lessons.filter((l) => l.id !== current.id)];
     renderLibrary();
@@ -783,7 +801,7 @@
     const q = el.librarySearch.value.trim();
     const visible = lessons.filter((l) => matches(l, q));
     if (!visible.length) {
-      el.library.innerHTML = '<p class="muted small">Nothing found.</p>';
+      el.library.innerHTML = '<p class="muted small">Nic nenalezeno.</p>';
       return;
     }
     const subjectIds = [...Object.keys(SUBJECTS), "other"];
@@ -826,13 +844,13 @@
     });
     const date = document.createElement("span");
     date.className = "muted small";
-    date.textContent = new Date(l.date).toLocaleDateString();
+    date.textContent = new Date(l.date).toLocaleDateString("cs-CZ");
     const del = document.createElement("button");
     del.className = "icon";
-    del.title = "Delete lesson";
+    del.title = "Smazat";
     del.textContent = "✕";
     del.addEventListener("click", async () => {
-      if (!confirm(`Delete “${l.title}”? This cannot be undone.`)) return;
+      if (!confirm(`Smazat „${l.title}“? Tohle nejde vrátit zpět.`)) return;
       await LessonDB.remove(l.id);
       lessons = lessons.filter((x) => x.id !== l.id);
       if (current && current.id === l.id) { current = null; renderResult(); }
@@ -860,9 +878,9 @@
       for (const l of incoming) await LessonDB.put(l);
       lessons = await loadLessons();
       renderLibrary();
-      alert(`Imported ${incoming.length} lesson(s).`);
+      alert(`Obnoveno ze zálohy: ${incoming.length}.`);
     } catch (e) {
-      showError("Import failed: " + e.message);
+      showError("Obnovení ze zálohy selhalo: " + e.message);
     }
   });
 
@@ -922,12 +940,12 @@
   }
 
   el.copySetupLink.addEventListener("click", async () => {
-    if (!el.openaiKey.value.trim()) { alert("Enter the OpenAI API key first."); return; }
+    if (!el.openaiKey.value.trim()) { alert("Nejdřív vlož OpenAI API klíč."); return; }
     try {
       await navigator.clipboard.writeText(buildSetupLink());
-      flash(el.copySetupLink, "Link copied ✓");
+      flash(el.copySetupLink, "Odkaz zkopírován ✓");
     } catch {
-      prompt("Copy this setup link:", buildSetupLink());
+      prompt("Zkopíruj tento instalační odkaz:", buildSetupLink());
     }
   });
 
@@ -940,5 +958,5 @@
     lessons = all;
     renderLibrary();
     if (lessons[0] && !current) { current = lessons[0]; renderResult(); renderLibrary(); }
-  }).catch((e) => showError("Could not load saved lessons: " + e.message));
+  }).catch((e) => showError("Nepodařilo se načíst uložené hodiny: " + e.message));
 })();

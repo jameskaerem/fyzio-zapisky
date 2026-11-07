@@ -1,44 +1,44 @@
 <!doctype html>
-<html lang="en">
+<html lang="cs">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Lesson Notes</title>
-  <meta name="description" content="Turn recorded lessons into transcripts and structured study notes for physiotherapy admission prep.">
+  <title>Fyzio zápisky</title>
+  <meta name="description" content="Přepis nahraných hodin a strukturované studijní zápisky pro přípravu na přijímačky na fyzioterapii.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="top">
     <div class="wrap row">
-      <h1>🩺 Lesson Notes</h1>
-      <button id="settingsBtn" class="ghost" type="button">⚙ Settings</button>
+      <h1>🩺 Fyzio zápisky</h1>
+      <button id="settingsBtn" class="ghost" type="button">⚙ Nastavení</button>
     </div>
   </header>
 
   <main class="wrap">
     <div id="keyWarning" class="notice" hidden>
-      First, add your OpenAI API key. <button type="button" class="link">Open Settings</button>
+      Nejdřív vlož OpenAI API klíč. <button type="button" class="link">Otevřít nastavení</button>
     </div>
 
     <div id="setupNotice" class="notice ok" hidden>
-      ✓ API keys are saved in this browser. You don't need to enter them again.
+      ✓ API klíče jsou uložené v tomto prohlížeči. Už je nemusíš znovu zadávat.
     </div>
 
     <div class="subject-row">
-      <span class="muted small">Subject</span>
-      <div id="subjects" class="subjects" role="radiogroup" aria-label="Subject"></div>
+      <span class="muted small">Předmět</span>
+      <div id="subjects" class="subjects" role="radiogroup" aria-label="Předmět"></div>
     </div>
 
     <label id="drop" class="drop">
       <input id="fileInput" type="file" accept="video/*,audio/*">
-      <strong>Drop a lesson video here</strong>
-      <span>or click to choose a file · MP4, MOV, WebM, MP3, M4A…</span>
-      <span class="muted small">The video stays on this device. Only a small audio file is sent for transcription.</span>
+      <strong>Přetáhni sem video z hodiny</strong>
+      <span>nebo klikni a vyber soubor · MP4, MOV, WebM, MP3, M4A…</span>
+      <span class="muted small">Video zůstává v tomto zařízení. K přepisu se odesílá jen malý zvukový soubor.</span>
     </label>
     <p id="engineInfo" class="muted small engine-info"></p>
     <div class="own-note-row">
-      <button id="newNoteBtn" type="button" class="ghost">✍️ Write my own note</button>
+      <button id="newNoteBtn" type="button" class="ghost">✍️ Napsat vlastní zápis</button>
     </div>
 
     <section id="progress" class="card" hidden>
@@ -51,106 +51,105 @@
 
     <section id="result" class="card" hidden>
       <p id="resultPath" class="result-path small"></p>
-      <span id="ownBadge" class="own-badge" hidden>✍️ My own note</span>
+      <span id="ownBadge" class="own-badge" hidden>✍️ Můj vlastní zápis</span>
       <div class="row title-row">
         <h2 id="resultTitle"></h2>
-        <button id="editBtn" type="button" class="ghost small-btn" title="Rename or move to another folder">✎ Edit</button>
+        <button id="editBtn" type="button" class="ghost small-btn" title="Přejmenovat nebo přesunout do jiné složky">✎ Upravit</button>
       </div>
       <p id="resultMeta" class="muted small result-meta"></p>
       <div class="toolbar">
         <div id="tabs" class="tabs" role="tablist">
-          <button id="tabNotes" role="tab" type="button" aria-selected="true">Notes</button>
-          <button id="tabTranscript" role="tab" type="button" aria-selected="false">Transcript</button>
+          <button id="tabNotes" role="tab" type="button" aria-selected="true">Zápisky</button>
+          <button id="tabTranscript" role="tab" type="button" aria-selected="false">Přepis</button>
         </div>
         <div class="actions">
-          <button id="copyBtn" type="button">Copy notes (Markdown)</button>
-          <button id="downloadBtn" type="button" class="ghost">Download</button>
-          <button id="regenBtn" type="button" class="ghost">Regenerate notes</button>
+          <button id="copyBtn" type="button">Kopírovat zápisky</button>
+          <button id="downloadBtn" type="button" class="ghost">Stáhnout</button>
+          <button id="regenBtn" type="button" class="ghost">Vytvořit zápisky znovu</button>
         </div>
       </div>
       <article id="notesView" class="notes"></article>
       <pre id="transcriptView" class="transcript" hidden></pre>
       <section id="myNotes" class="my-notes">
-        <h3>✍️ My notes</h3>
+        <h3>✍️ Moje poznámky</h3>
         <div id="annotationList"></div>
         <form id="annotationForm" class="annotation-form">
-          <textarea id="annotationText" rows="3" placeholder="Add your own note to this lesson… (Markdown works: **bold**, - lists)"></textarea>
-          <button type="submit">Add note</button>
+          <textarea id="annotationText" rows="3" placeholder="Přidej vlastní poznámku k této hodině… (funguje **tučně**, - odrážky)"></textarea>
+          <button type="submit">Přidat poznámku</button>
         </form>
       </section>
-      <p class="muted small">Tip: “Copy notes” and paste into Notion – headings and lists keep their formatting.</p>
+      <p class="muted small">Tip: „Kopírovat zápisky“ a vložit do Notionu – nadpisy a odrážky zůstanou zachované.</p>
     </section>
 
     <section id="librarySection" class="card" hidden>
       <div class="row library-head">
-        <h2>📚 Library</h2>
+        <h2>📚 Knihovna</h2>
         <div class="actions">
-          <button id="newNoteBtn2" type="button" class="ghost">✍️ New note</button>
-          <button id="exportBtn" type="button" class="ghost">Export backup</button>
-          <label class="ghost button-like">Import<input id="importInput" type="file" accept="application/json,.json" hidden></label>
+          <button id="newNoteBtn2" type="button" class="ghost">✍️ Nový zápis</button>
+          <button id="exportBtn" type="button" class="ghost">Zálohovat</button>
+          <label class="ghost button-like">Obnovit ze zálohy<input id="importInput" type="file" accept="application/json,.json" hidden></label>
         </div>
       </div>
-      <input id="librarySearch" type="search" placeholder="Search lessons…" aria-label="Search lessons">
+      <input id="librarySearch" type="search" placeholder="Hledat v zápiscích…" aria-label="Hledat v zápiscích">
       <div id="library" class="library"></div>
-      <p class="muted small">Saved only in this browser. Use “Export backup” now and then to keep a copy.</p>
+      <p class="muted small">Uloženo jen v tomto prohlížeči. Občas klikni na „Zálohovat“, ať máš kopii.</p>
     </section>
   </main>
 
   <dialog id="settingsDialog">
     <form id="settingsForm" method="dialog">
-      <h2>Settings</h2>
-      <label>OpenAI API key <span class="muted">(required – writes the study notes)</span>
+      <h2>Nastavení</h2>
+      <label>OpenAI API klíč <span class="muted">(povinný – píše zápisky, záložní přepis)</span>
         <input id="openaiKey" type="password" autocomplete="off" placeholder="sk-…" spellcheck="false">
       </label>
-      <label>ElevenLabs API key <span class="muted">(optional – most accurate transcription)</span>
+      <label>ElevenLabs API klíč <span class="muted">(volitelný – nejpřesnější přepis)</span>
         <input id="elevenKey" type="password" autocomplete="off" placeholder="sk_…" spellcheck="false">
       </label>
-      <p class="muted small">Keys are stored only in this browser and sent only to api.openai.com / api.elevenlabs.io.</p>
-      <button id="copySetupLink" type="button" class="ghost">Copy setup link for another device</button>
-      <p class="muted small">Opening the link saves these keys in that browser. Share it only privately – anyone with the link can use your credit.</p>
-      <label>Transcription
+      <p class="muted small">Klíče se ukládají jen v tomto prohlížeči a posílají se jen na api.openai.com / api.elevenlabs.io.</p>
+      <button id="copySetupLink" type="button" class="ghost">Kopírovat instalační odkaz pro jiné zařízení</button>
+      <p class="muted small">Otevřením odkazu se klíče uloží v daném prohlížeči. Posílej ho jen soukromě – kdo má odkaz, může čerpat tvůj kredit.</p>
+      <label>Přepis
         <select id="engine">
-          <option value="auto">Auto – ElevenLabs if its key is set, otherwise OpenAI</option>
-          <option value="elevenlabs">ElevenLabs Scribe v2 (≈ $0.27 / hour)</option>
-          <option value="openai">OpenAI gpt-transcribe (≈ $0.27 / hour)</option>
+          <option value="auto">Automaticky – ElevenLabs, při chybě záložně OpenAI</option>
+          <option value="openai">Jen OpenAI gpt-transcribe</option>
         </select>
       </label>
-      <label>Study notes model (OpenAI)
+      <label>Model pro zápisky (OpenAI)
         <select id="notesModel"></select>
       </label>
-      <button id="loadModels" type="button" class="ghost">Load my models</button>
+      <button id="loadModels" type="button" class="ghost">Načíst moje modely</button>
       <details>
-        <summary>Advanced</summary>
-        <label>Extra key terms for transcription (comma-separated, added to every subject)
-          <textarea id="extraTerms" rows="3" placeholder="e.g. teacher's name, specific terms from your course"></textarea>
+        <summary>Pokročilé</summary>
+        <label>Vlastní odborné pojmy pro přepis (oddělené čárkou, platí pro všechny předměty)
+          <textarea id="extraTerms" rows="3" placeholder="např. jméno vyučujícího, specifické pojmy z kurzu"></textarea>
         </label>
       </details>
       <div class="dialog-actions">
-        <button type="submit" value="cancel" class="ghost" formnovalidate>Cancel</button>
-        <button type="submit" value="save">Save</button>
+        <button type="submit" value="cancel" class="ghost" formnovalidate>Zrušit</button>
+        <button type="submit" value="save">Uložit</button>
       </div>
     </form>
   </dialog>
 
   <dialog id="editDialog">
     <form id="editForm" method="dialog">
-      <h2 id="editHeading">Edit lesson</h2>
-      <label>Title
+      <h2 id="editHeading">Upravit hodinu</h2>
+      <label>Název
         <input id="editTitle" type="text" required>
       </label>
-      <label>Subject
+      <label>Předmět
         <select id="editSubject"></select>
       </label>
-      <label>Folder (topic)
+      <label>Složka (téma)
         <input id="editTopic" type="text" list="topicOptions" placeholder="Nezařazeno">
         <datalist id="topicOptions"></datalist>
       </label>
-      <label id="editContentWrap" hidden>Note
-        <textarea id="editContent" rows="12" placeholder="Write your note… (Markdown works: # heading, **bold**, - list)"></textarea>
+      <label id="editContentWrap" hidden>Text zápisu
+        <textarea id="editContent" rows="12" placeholder="Napiš svůj zápis… (funguje # nadpis, **tučně**, - odrážky)"></textarea>
       </label>
       <div class="dialog-actions">
-        <button type="submit" value="cancel" class="ghost" formnovalidate>Cancel</button>
-        <button type="submit" value="save">Save</button>
+        <button type="submit" value="cancel" class="ghost" formnovalidate>Zrušit</button>
+        <button type="submit" value="save">Uložit</button>
       </div>
     </form>
   </dialog>
