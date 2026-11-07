@@ -6,7 +6,7 @@
   <title>Fyzio zápisky</title>
   <meta name="description" content="Přepis nahraných hodin a strukturované studijní zápisky pro přípravu na přijímačky na fyzioterapii.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🩺</text></svg>">
-  <link rel="stylesheet" href="styles.css?v=9">
+  <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
   <header class="top">
@@ -125,11 +125,21 @@
 
         <div id="mapView" class="map-view" hidden>
           <div class="map-tools">
-            <span class="map-hint muted small">Klikni na kolečko pro rozbalení větve, na text pro otevření sekce v zápiscích.</span>
+            <span class="map-hint muted small">Klikni na text pro náhled, na kolečko pro rozbalení větve. Mapou jde posouvat a přibližovat.</span>
             <button id="mapExpand" type="button" class="ghost small-btn">Rozbalit vše</button>
             <button id="mapFit" type="button" class="ghost small-btn">Přizpůsobit</button>
           </div>
-          <svg id="mapSvg" class="map-svg"></svg>
+          <div class="map-stage">
+            <svg id="mapSvg" class="map-svg"></svg>
+            <div id="mapPreview" class="map-preview" hidden>
+              <div class="map-preview-head">
+                <strong id="mapPreviewTitle"></strong>
+                <button id="mapPreviewClose" type="button" class="icon" title="Zavřít náhled">✕</button>
+              </div>
+              <div id="mapPreviewBody" class="map-preview-body notes"></div>
+              <button id="mapPreviewOpen" type="button" class="small-btn">📖 Otevřít v zápiscích</button>
+            </div>
+          </div>
         </div>
 
         <div id="transcriptView" class="transcript" hidden></div>
@@ -195,14 +205,14 @@
     </form>
   </dialog>
 
-  <script src="vendor/mp4box.all.min.js?v=9"></script>
-  <script src="vendor/marked.min.js?v=9"></script>
-  <script src="vendor/purify.min.js?v=9"></script>
-  <script src="vendor/d3.min.js?v=9"></script>
-  <script src="vendor/markmap-view.js?v=9"></script>
-  <script src="subjects.js?v=9"></script>
-  <script src="db.js?v=9"></script>
-  <script src="audio.js?v=9"></script>
-  <script src="app.js?v=9"></script>
+  <script src="vendor/mp4box.all.min.js?v=11"></script>
+  <script src="vendor/marked.min.js?v=11"></script>
+  <script src="vendor/purify.min.js?v=11"></script>
+  <script src="vendor/d3.min.js?v=11"></script>
+  <script src="vendor/markmap-view.js?v=11"></script>
+  <script src="subjects.js?v=11"></script>
+  <script src="db.js?v=11"></script>
+  <script src="audio.js?v=11"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>

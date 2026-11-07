@@ -30,6 +30,11 @@ A small static web app (UI in Czech) that turns recorded Czech lessons into a tr
     - The mind map (markmap) is built from the note headings and bold key terms, and is linked: clicking a node opens that section in the notes.
 11. **Library tabs**: All / Chemistry / Physics / Biology / Somatology with counts; the chosen tab is remembered. Topic folders are open by default.
 12. **PDF**: “📄 PDF” opens the browser's print dialog with a print stylesheet. All sections are expanded, colours are kept, and personal notes are included. Choose “Save as PDF”.
+13. **Look and feel**:
+    - Every section card has its own colour (left stripe, tinted header, coloured subheadings, highlighted bold terms, tinted tables) and opens and closes smoothly.
+    - Section headings start with an emoji chosen by the model.
+    - In the mind map, each branch uses its section's colour, and clicking a node shows a preview card with an “Open in notes” button.
+    - Each subject has an accent colour (chemistry teal, physics orange, biology green, somatology rose).
 
 ## Setup
 

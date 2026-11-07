@@ -155,18 +155,19 @@ ${topicList(existingTopics)}
 Obecná pravidla pro zápisky:
 - Začni nadpisem "# " s výstižným názvem tématu hodiny a pod ním krátkým shrnutím (2–4 věty).
 - Obsah rozděl do sekcí "##" (případně "###") podle témat v pořadí, v jakém zazněla.
+- Každý nadpis "##" začni jedním výstižným emoji podle obsahu (např. "## 🦴 Kosti dolní končetiny", "## ⚡ Ohmův zákon", "## 🧬 Mendelovy zákony", "## ⚗️ Kyslíkaté kyseliny"). Nadpisy "###" piš bez emoji.
 - Důležité definice, pravidla a vzorce dej do calloutu: řádek začínající "> 💡 **Klíčové:** ".
 - Časté chyby a záludnosti z testů: "> ⚠️ **Pozor:** ". Řešené příklady: "> 🧪 **Příklad:** ".
 - Opravuj zjevné chyby automatického přepisu v odborných pojmech, ale nevymýšlej nic, co v hodině nezaznělo. Pokud si nejsi jistý, napiš „(nejasné v záznamu)“.
-- Vynech organizační řeči a odbočky. Zadané úkoly, testy a termíny ale uveď v sekci "## Organizační informace".
+- Vynech organizační řeči a odbočky. Zadané úkoly, testy a termíny ale uveď v sekci "## 📅 Organizační informace".
 
 Pravidla pro předmět ${subject.label}:
 ${subject.notesRules}
 
 Na konec přidej:
-- "## Klíčové body" (5–10 odrážek),
-- "## Testové otázky" – 5 otázek ve stylu přijímacích testů (výběr ze 4 možností a–d) k probranému učivu,
-- "## Řešení" se správnými odpověďmi a jednovětým vysvětlením.`;
+- "## 🔑 Klíčové body" (5–10 odrážek),
+- "## 📝 Testové otázky" – 5 otázek ve stylu přijímacích testů (výběr ze 4 možností a–d) k probranému učivu,
+- "## ✅ Řešení" se správnými odpověďmi a jednovětým vysvětlením.`;
 
   /* ---------- Long lessons (map–reduce) ----------
    * Each ~30 min segment gets its own detailed notes (sections only);
@@ -181,9 +182,10 @@ Na konec přidej:
 
 Vytvoř podrobné studijní zápisky v češtině ve formátu Markdown POUZE k této části:
 - Začni rovnou sekcemi "## <výstižný název tématu>" – podle toho, kolik témat v této části zaznělo (obvykle 1–4). Uvnitř používej "###".
+- Každý nadpis "##" začni jedním výstižným emoji podle obsahu (např. "## 🦴 Kosti dolní končetiny", "## ⚡ Ohmův zákon", "## 🧬 Mendelovy zákony", "## ⚗️ Kyslíkaté kyseliny"). Nadpisy "###" piš bez emoji.
 - NEPIŠ úvodní nadpis "#", shrnutí celé hodiny, klíčové body ani testové otázky – ty vzniknou zvlášť.
 - Pokud část začíná nebo končí uprostřed tématu, prostě na něj navaž.
-- Zadané úkoly, testy a termíny uveď v sekci "## Organizační informace" (jen pokud zazněly).
+- Zadané úkoly, testy a termíny uveď v sekci "## 📅 Organizační informace" (jen pokud zazněly).
 ${COMMON_RULES}
 
 Pravidla pro předmět ${subject.label}:
@@ -205,9 +207,9 @@ ${topicList(existingTopics)}
 
 Za oddělovačem napiš POUZE:
 1. "# <název hodiny>" a pod ním shrnutí celé hodiny (3–6 vět) a přehled probraných témat jako krátký seznam.
-2. "## Klíčové body" (8–15 odrážek za celou hodinu).
-3. "## Testové otázky" – 8 otázek ve stylu přijímacích testů (výběr ze 4 možností a–d) napříč celou hodinou.
-4. "## Řešení" se správnými odpověďmi a jednovětým vysvětlením.
+2. "## 🔑 Klíčové body" (8–15 odrážek za celou hodinu).
+3. "## 📝 Testové otázky" – 8 otázek ve stylu přijímacích testů (výběr ze 4 možností a–d) napříč celou hodinou.
+4. "## ✅ Řešení" se správnými odpověďmi a jednovětým vysvětlením.
 Samotné zápisky znovu NEOPISUJ.`;
 
   // Used for the first audio part while the subject is still unknown

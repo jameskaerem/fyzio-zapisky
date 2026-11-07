@@ -77,6 +77,8 @@
     homeView: $("homeView"), lessonView: $("lessonView"), backBtn: $("backBtn"),
     notesPane: $("notesPane"), toc: $("toc"), sectionTools: $("sectionTools"),
     expandAll: $("expandAll"), collapseAll: $("collapseAll"),
+    mapPreview: $("mapPreview"), mapPreviewTitle: $("mapPreviewTitle"), mapPreviewBody: $("mapPreviewBody"),
+    mapPreviewOpen: $("mapPreviewOpen"), mapPreviewClose: $("mapPreviewClose"),
     tabMap: $("tabMap"), mapView: $("mapView"), mapSvg: $("mapSvg"), mapFit: $("mapFit"), mapExpand: $("mapExpand"),
   };
 
@@ -646,7 +648,10 @@
     return { intro: intro.join("\n").trim(), sections: sections.map((x) => ({ title: x.title, body: x.body.join("\n").trim() })) };
   }
 
+  // Section titles may start with an emoji ("## ✅ Řešení"); match on the plain text
+  const plain = (t) => t.replace(/^[^\p{L}\p{N}]+/u, "");
   const ALWAYS_CLOSED = /^(řešení|reseni)/i;
+  const SECTION_COLORS = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#ec4899", "#8b5cf6", "#14b8a6"];
 
   function renderNotes() {
     const own = current.kind === "note";
@@ -671,7 +676,8 @@
       const det = document.createElement("details");
       det.className = "section";
       det.id = `sec-${i}`;
-      if (sections.length < 3 && !ALWAYS_CLOSED.test(sec.title)) det.open = true;
+      det.style.setProperty("--sec", SECTION_COLORS[i % SECTION_COLORS.length]);
+      if (sections.length < 3 && !ALWAYS_CLOSED.test(plain(sec.title))) det.open = true;
       const sum = document.createElement("summary");
       sum.textContent = sec.title;
       const body = document.createElement("div");
@@ -703,7 +709,7 @@
   }
 
   el.expandAll.addEventListener("click", () => el.notesView.querySelectorAll("details.section").forEach((d) => {
-    if (!ALWAYS_CLOSED.test(d.querySelector("summary").textContent)) d.open = true;
+    if (!ALWAYS_CLOSED.test(plain(d.querySelector("summary").textContent))) d.open = true;
   }));
   el.collapseAll.addEventListener("click", () => el.notesView.querySelectorAll("details.section").forEach((d) => { d.open = false; }));
 
@@ -736,17 +742,19 @@
 
   function buildMindmapData() {
     const { sections } = splitSections(current.notes || "");
+    let color = "#64748b";
     const node = (text, target, children = []) => ({
-      content: escapeHtml(shorten(text)), children, payload: { target },
+      content: escapeHtml(shorten(text)), children, payload: { target, color },
     });
     const boldTerms = (md) => [...new Set([...md.matchAll(/\*\*([^*\n]{2,40})\*\*/g)]
       .map((m) => m[1].replace(/[:：]\s*$/, "").trim())
-      .filter((t) => !/^(klíčové|pozor|příklad|moje poznámka)/i.test(t)))].slice(0, 5);
+      .filter((t) => !/^(klíčové|pozor|příklad|moje poznámka)/i.test(t)))].slice(0, 3);
     const children = [];
     sections.forEach((sec, i) => {
-      if (SKIP_IN_MAP.test(sec.title)) return;
+      if (SKIP_IN_MAP.test(plain(sec.title))) return;
+      color = SECTION_COLORS[i % SECTION_COLORS.length]; // same colour as the section card
       let kids;
-      if (/^klíčové body/i.test(sec.title)) {
+      if (/^klíčové body/i.test(plain(sec.title))) {
         kids = sec.body.split("\n").filter((l) => /^\s*[-*]\s+/.test(l)).slice(0, 10)
           .map((l) => node(l.replace(/^\s*[-*]\s+/, "").replace(/\*\*/g, ""), { i }));
       } else {
@@ -760,6 +768,7 @@
       }
       children.push(node(sec.title, { i }, kids));
     });
+    color = "#64748b";
     return node(current.title, null, children);
   }
 
@@ -772,30 +781,68 @@
     }
     const data = buildMindmapData();
     el.mapSvg.innerHTML = "";
-    mm = markmap.Markmap.create(el.mapSvg, { duration: 300, maxWidth: 260, initialExpandLevel: 2, paddingX: 10 }, data);
-    setTimeout(() => mm && mm.fit(), 350);
+    el.mapPreview.hidden = true;
+    mm = markmap.Markmap.create(el.mapSvg, {
+      duration: 250, maxWidth: 230, initialExpandLevel: 2,
+      paddingX: 12, spacingVertical: 14, spacingHorizontal: 90,
+      // Each main branch keeps the colour of its section card in the notes
+      color: (n) => (n.payload && n.payload.color) || "#64748b",
+    }, data);
+    setTimeout(() => mm && mm.fit(), 300);
   }
 
-  // Clicking a node's text opens the matching section in the notes
+  // Clicking a node's text shows a preview of that part of the notes
+  let previewTarget = null;
   el.mapSvg.addEventListener("click", (e) => {
     const fo = e.target.closest && e.target.closest("foreignObject");
     if (!fo) return;
     const g = fo.closest("g.markmap-node");
     const d = g && window.d3 && d3.select(g).datum();
     const target = d && (d.payload || (d.data && d.data.payload) || {}).target;
-    if (target) { e.stopPropagation(); openSection(target.i, target.j); }
+    if (target) { e.stopPropagation(); showMapPreview(target); }
   }, true);
+
+  function showMapPreview(target) {
+    const { sections } = splitSections(current.notes || "");
+    const sec = sections[target.i];
+    if (!sec) return;
+    let title = sec.title, md = sec.body;
+    if (target.j !== undefined) {
+      const subs = [...sec.body.matchAll(/^###\s+(.+)$/gm)];
+      const m = subs[target.j];
+      if (m) {
+        title = `${sec.title} › ${m[1].trim()}`;
+        md = sec.body.slice(m.index + m[0].length, target.j + 1 < subs.length ? subs[target.j + 1].index : undefined);
+      }
+    } else {
+      md = md.split(/^###\s/m)[0] || md; // intro of the section, before its first subsection
+    }
+    md = md.trim();
+    if (md.length > 1200) md = md.slice(0, 1200).replace(/\s+\S*$/, "") + " …";
+    previewTarget = target;
+    el.mapPreviewTitle.textContent = title;
+    el.mapPreviewBody.innerHTML = md ? renderMarkdown(md) : '<p class="muted">Podrobnosti najdeš v zápiscích.</p>';
+    el.mapPreview.hidden = false;
+    el.mapPreview.scrollTop = 0;
+  }
+
+  el.mapPreviewOpen.addEventListener("click", () => {
+    if (previewTarget) openSection(previewTarget.i, previewTarget.j);
+  });
+  el.mapPreviewClose.addEventListener("click", () => { el.mapPreview.hidden = true; });
 
   el.mapFit.addEventListener("click", () => mm && mm.fit());
   el.mapExpand.addEventListener("click", () => {
     if (!mm) return;
     const walk = (n) => { n.payload = Object.assign({}, n.payload, { fold: 0 }); (n.children || []).forEach(walk); };
     walk(mm.state.data);
-    mm.renderData().then(() => mm.fit());
+    // renderData() returns a promise in some markmap versions and nothing in others
+    Promise.resolve(mm.renderData()).then(() => setTimeout(() => mm.fit(), 300));
   });
 
   function renderResult() {
     if (!current) return;
+    el.lessonView.dataset.subject = current.subject || "";
     el.resultTitle.textContent = current.title;
     el.resultPath.textContent = `${subjectLabel(current.subject)} › 📁 ${current.topic || UNSORTED}`;
     const own = current.kind === "note";
