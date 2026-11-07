@@ -6,7 +6,7 @@
   <title>Fyzio zápisky</title>
   <meta name="description" content="Přepis nahraných hodin a strukturované studijní zápisky pro přípravu na přijímačky na fyzioterapii.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🩺</text></svg>">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
   <header class="top">
@@ -58,6 +58,7 @@
           <h2>📚 Knihovna</h2>
           <button id="newNoteBtn2" type="button" class="ghost small-btn">✍️ Nový zápis</button>
         </div>
+        <div id="libTabs" class="lib-tabs" role="tablist" aria-label="Předměty v knihovně" hidden></div>
         <input id="librarySearch" type="search" placeholder="Hledat v zápiscích…" aria-label="Hledat v zápiscích">
         <div id="library" class="library"></div>
         <p id="libraryEmpty" class="muted small" hidden>Zatím tu nic není. Nahraj první video z hodiny výše.</p>
@@ -97,7 +98,8 @@
           </div>
           <div class="actions">
             <button id="copyBtn" type="button" class="small-btn">Kopírovat zápisky</button>
-            <button id="downloadBtn" type="button" class="ghost small-btn">Stáhnout</button>
+            <button id="pdfBtn" type="button" class="ghost small-btn">📄 PDF</button>
+            <button id="downloadBtn" type="button" class="ghost small-btn">Stáhnout text</button>
             <button id="regenBtn" type="button" class="ghost small-btn">Vytvořit zápisky znovu</button>
           </div>
         </div>
@@ -193,14 +195,14 @@
     </form>
   </dialog>
 
-  <script src="vendor/mp4box.all.min.js"></script>
-  <script src="vendor/marked.min.js"></script>
-  <script src="vendor/purify.min.js"></script>
-  <script src="vendor/d3.min.js"></script>
-  <script src="vendor/markmap-view.js"></script>
-  <script src="subjects.js"></script>
-  <script src="db.js"></script>
-  <script src="audio.js"></script>
-  <script src="app.js"></script>
+  <script src="vendor/mp4box.all.min.js?v=9"></script>
+  <script src="vendor/marked.min.js?v=9"></script>
+  <script src="vendor/purify.min.js?v=9"></script>
+  <script src="vendor/d3.min.js?v=9"></script>
+  <script src="vendor/markmap-view.js?v=9"></script>
+  <script src="subjects.js?v=9"></script>
+  <script src="db.js?v=9"></script>
+  <script src="audio.js?v=9"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

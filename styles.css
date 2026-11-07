@@ -270,3 +270,44 @@ details.section.flash { box-shadow: 0 0 0 3px var(--accent); }
   .tabs { width: 100%; }
   .tabs button { flex: 1; padding: 7px 4px; }
 }
+
+/* Library subject tabs */
+.lib-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 12px; scrollbar-width: thin; }
+.lib-tabs button {
+  flex-shrink: 0; background: var(--surface); color: var(--text); border-color: var(--border);
+  border-radius: 999px; padding: 6px 12px; font-size: 0.9rem;
+}
+.lib-tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.lib-tabs button[aria-selected="true"] .count { background: transparent; color: inherit; border-color: currentColor; }
+.lib-topic.flat { margin-left: 0; padding-left: 0; border-left: 0; }
+
+/* ===== Print / PDF ===== */
+@media print {
+  :root { color-scheme: light; }
+  body { background: #fff !important; color: #111 !important; font-size: 11pt; }
+  .top, #homeView, .back-btn, .toolbar, .section-tools, #toc, #mapView, #transcriptView,
+  #editBtn, #annotationForm, .annotation-head button, #notesPane > p.muted, #error, dialog { display: none !important; }
+  .wrap { max-width: none; padding: 0; }
+  #lessonView { display: block !important; }
+  .card { border: 0; padding: 0; margin: 0; background: #fff; }
+  .result-path { color: #444; }
+  details.section { border: 0; margin: 10px 0 0; break-inside: auto; background: #fff; }
+  details.section > summary {
+    padding: 0; border: 0 !important; font-size: 13pt; margin: 14px 0 6px;
+    border-bottom: 1px solid #ccc !important; padding-bottom: 3px;
+  }
+  details.section > summary::before { content: none; }
+  .section-body { padding: 0; }
+  .callout, .annotation, .notes.own, .own-badge {
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; break-inside: avoid;
+  }
+  .callout { background: #eef4ff !important; border-left-color: #2f6fde !important; }
+  .callout.warn { background: #fff6e5 !important; border-left-color: #e19a12 !important; }
+  .callout.example { background: #ecf8f0 !important; border-left-color: #2f9e5a !important; }
+  .annotation { background: #fdf2f8 !important; border-left-color: #db2777 !important; }
+  .my-notes { border-top: 1px dashed #bbb; }
+  .my-notes:not(:has(.annotation)) { display: none; }
+  h1, h2, h3 { break-after: avoid; }
+  table { break-inside: avoid; }
+  a { color: inherit; text-decoration: none; }
+}

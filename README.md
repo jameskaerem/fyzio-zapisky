@@ -28,9 +28,12 @@ A small static web app (UI in Czech) that turns recorded Czech lessons into a tr
     - Notes are collapsible sections (expand/collapse all). The answers section stays closed for self-testing.
     - The transcript is split into timed parts.
     - The mind map (markmap) is built from the note headings and bold key terms, and is linked: clicking a node opens that section in the notes.
+11. **Library tabs**: All / Chemistry / Physics / Biology / Somatology with counts; the chosen tab is remembered. Topic folders are open by default.
+12. **PDF**: “📄 PDF” opens the browser's print dialog with a print stylesheet. All sections are expanded, colours are kept, and personal notes are included. Choose “Save as PDF”.
 
 ## Setup
 
+- Script and stylesheet URLs carry a `?v=N` query. Bump it in `index.html` on every release so browsers never mix a new page with cached old scripts (GitHub Pages caches files for about 10 minutes).
 - No build step and no backend. The app is plain HTML/CSS/JS, and its libraries are vendored in `vendor/` (mp4box.js 0.5.2, marked 12.0.2, DOMPurify 3.1.6, d3 7.9.0, markmap-view 0.17.2).
 - Open the page, go to **Settings**, and paste an OpenAI API key (required) and, optionally, an ElevenLabs API key. The keys are stored only in that browser's `localStorage` and are sent only to the respective APIs.
 - **Setup link:** Settings → *Copy setup link* creates `https://…/#openai=…&eleven=…`. Opening it saves the keys in that browser and removes them from the address bar. The URL fragment is never sent to the web server and the keys are never stored in the repository. Share the link only privately.

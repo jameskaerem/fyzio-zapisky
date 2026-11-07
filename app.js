@@ -67,6 +67,7 @@
     copyBtn: $("copyBtn"), downloadBtn: $("downloadBtn"), regenBtn: $("regenBtn"),
     librarySection: $("librarySection"), library: $("library"), librarySearch: $("librarySearch"),
     exportBtn: $("exportBtn"), importInput: $("importInput"), libraryEmpty: $("libraryEmpty"),
+    libTabs: $("libTabs"), pdfBtn: $("pdfBtn"),
     editDialog: $("editDialog"), editForm: $("editForm"), editTitle: $("editTitle"),
     editSubject: $("editSubject"), editTopic: $("editTopic"), topicOptions: $("topicOptions"),
     editHeading: $("editHeading"), editContentWrap: $("editContentWrap"), editContent: $("editContent"),
@@ -652,7 +653,8 @@
     el.notesView.classList.toggle("own", own);
     el.toc.innerHTML = "";
     if (!current.notes) {
-      el.notesView.innerHTML = `<p class="muted">${own ? "Prázdný zápis – napiš ho přes ✎ Upravit." : "Zápisky se ještě připravují…"}</p>`;
+      el.notesView.innerHTML = `<p class="muted">${own ? "Prázdný zápis – napiš ho přes ✎ Upravit."
+        : busy ? "Zápisky se ještě připravují…" : "Zápisky zatím nejsou – zkus tlačítko „Vytvořit zápisky znovu“."}</p>`;
       el.sectionTools.hidden = true;
       return;
     }
@@ -890,6 +892,7 @@
     el.mapView.hidden = tab !== "map";
     el.transcriptView.hidden = tab !== "transcript";
     el.copyBtn.hidden = tab === "map";
+    el.pdfBtn.hidden = tab === "transcript";
     el.downloadBtn.hidden = tab === "map";
     el.copyBtn.textContent = tab === "transcript" ? "Kopírovat přepis" : "Kopírovat zápisky";
     if (tab === "map") renderMindmap();
@@ -917,6 +920,26 @@
     const suffix = current.kind === "note" ? " – můj zápis.md" : isNotes ? " – zápisky.md" : " – přepis.txt";
     downloadFile(current.title + suffix, currentText(),
       isNotes ? "text/markdown" : "text/plain");
+  });
+
+  // PDF: the browser's print dialog ("Uložit jako PDF") with a print stylesheet; all sections expanded
+  el.pdfBtn.addEventListener("click", () => {
+    if (!current) return;
+    setTab("notes");
+    const sections = [...el.notesView.querySelectorAll("details.section")];
+    const wasOpen = sections.map((d) => d.open);
+    sections.forEach((d) => { d.open = true; });
+    const oldTitle = document.title;
+    document.title = current.title.replace(/[\\/:*?"<>|]+/g, "-");
+    document.body.classList.add("printing");
+    const restore = () => {
+      sections.forEach((d, i) => { d.open = wasOpen[i]; });
+      document.title = oldTitle;
+      document.body.classList.remove("printing");
+      window.removeEventListener("afterprint", restore);
+    };
+    window.addEventListener("afterprint", restore);
+    setTimeout(() => window.print(), 50);
   });
 
   function downloadFile(name, text, type) {
@@ -1054,40 +1077,71 @@
 
   const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+  const subjectKey = (l) => (SUBJECTS[l.subject] ? l.subject : "other");
+  let libFilter = store.get("tv.libFilter", "all");
+
+  function renderLibTabs() {
+    el.libTabs.innerHTML = "";
+    const counts = {};
+    for (const l of lessons) counts[subjectKey(l)] = (counts[subjectKey(l)] || 0) + 1;
+    const tabs = [["all", "📚 Vše", lessons.length],
+      ...Object.entries(SUBJECTS).map(([id, s]) => [id, `${s.icon} ${s.label}`, counts[id] || 0])];
+    if (counts.other) tabs.push(["other", "📄 Ostatní", counts.other]);
+    if (!tabs.some(([id]) => id === libFilter)) libFilter = "all";
+    for (const [id, label, n] of tabs) {
+      const bt = document.createElement("button");
+      bt.type = "button";
+      bt.setAttribute("role", "tab");
+      bt.setAttribute("aria-selected", String(libFilter === id));
+      bt.innerHTML = `${escapeHtml(label)} <span class="count">${n}</span>`;
+      bt.addEventListener("click", () => {
+        libFilter = id;
+        store.set("tv.libFilter", id);
+        renderLibrary();
+      });
+      el.libTabs.append(bt);
+    }
+    el.libTabs.hidden = !lessons.length;
+  }
+
   function renderLibrary() {
     el.libraryEmpty.hidden = lessons.length > 0;
     el.librarySearch.hidden = lessons.length < 4;
+    renderLibTabs();
     el.library.innerHTML = "";
     if (!lessons.length) return;
     const q = el.librarySearch.value.trim();
-    const visible = lessons.filter((l) => matches(l, q));
+    const visible = lessons.filter((l) => matches(l, q) && (libFilter === "all" || subjectKey(l) === libFilter));
     if (!visible.length) {
-      el.library.innerHTML = '<p class="muted small">Nic nenalezeno.</p>';
+      el.library.innerHTML = `<p class="muted small">${q ? "Nic nenalezeno." : "V tomto předmětu zatím nic není."}</p>`;
       return;
     }
-    const subjectIds = [...Object.keys(SUBJECTS), "other"];
+    const subjectIds = libFilter === "all" ? [...Object.keys(SUBJECTS), "other"] : [libFilter];
     for (const sid of subjectIds) {
-      const inSubject = visible.filter((l) => (SUBJECTS[l.subject] ? l.subject : "other") === sid);
+      const inSubject = visible.filter((l) => subjectKey(l) === sid);
       if (!inSubject.length) continue;
-      const sd = groupDetails("s:" + sid,
-        `${subjectLabel(sid)} <span class="count">${inSubject.length}</span>`, true);
-      sd.className = "lib-subject";
+      // With a single subject selected, show its folders directly (no extra subject level)
+      let container = el.library;
+      if (libFilter === "all") {
+        const sd = groupDetails("s:" + sid, `${subjectLabel(sid)} <span class="count">${inSubject.length}</span>`, true);
+        sd.className = "lib-subject";
+        el.library.append(sd);
+        container = sd;
+      }
       const topics = [...new Set(inSubject.map((l) => l.topic || UNSORTED))]
         .sort((a, b) => (a === UNSORTED) - (b === UNSORTED) || a.localeCompare(b, "cs"));
       for (const topic of topics) {
         const items = inSubject.filter((l) => (l.topic || UNSORTED) === topic)
           .sort((a, b) => a.date.localeCompare(b.date));
         const td = groupDetails(`t:${sid}:${topic}`,
-          `📁 ${escapeHtml(topic)} <span class="count">${items.length}</span>`,
-          !!q || (current && current.subject === sid && current.topic === topic));
-        td.className = "lib-topic";
+          `📁 ${escapeHtml(topic)} <span class="count">${items.length}</span>`, true);
+        td.className = "lib-topic" + (libFilter === "all" ? "" : " flat");
         const ul = document.createElement("ul");
         ul.className = "lessons";
         for (const l of items) ul.append(lessonItem(l));
         td.append(ul);
-        sd.append(td);
+        container.append(td);
       }
-      el.library.append(sd);
     }
   }
 
