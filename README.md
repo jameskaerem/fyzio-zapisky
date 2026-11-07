@@ -21,10 +21,17 @@ A small static web app (UI in Czech) that turns recorded Czech lessons into a tr
    - **My notes on a lesson**: personal notes added under the AI notes, each with a timestamp, editable and deletable. They are included, clearly marked, when the notes are copied or downloaded.
    - **Own note**: a standalone note written from scratch (Markdown), filed into a subject and topic folder like any lesson.
    - In the library, ✍️ marks an own note and 📝 marks a lesson with personal notes. Search covers both.
+9. **Long lessons (2–3 h)**: lessons over 40 minutes get notes in about 30-minute segments, one GPT call per segment, followed by a final call for the title, folder, summary, key points and test questions. This keeps long lessons detailed instead of compressed.
+10. **Layout**:
+    - The home screen is the library (upload on top).
+    - A lesson opens on its own screen with **📝 Notes**, **🗺️ Map** and **🎙️ Transcript** tabs. Browser back returns to the library.
+    - Notes are collapsible sections (expand/collapse all). The answers section stays closed for self-testing.
+    - The transcript is split into timed parts.
+    - The mind map (markmap) is built from the note headings and bold key terms, and is linked: clicking a node opens that section in the notes.
 
 ## Setup
 
-- No build step and no backend. The app is plain HTML/CSS/JS, and its libraries are vendored in `vendor/` (mp4box.js 0.5.2, marked 12.0.2, DOMPurify 3.1.6).
+- No build step and no backend. The app is plain HTML/CSS/JS, and its libraries are vendored in `vendor/` (mp4box.js 0.5.2, marked 12.0.2, DOMPurify 3.1.6, d3 7.9.0, markmap-view 0.17.2).
 - Open the page, go to **Settings**, and paste an OpenAI API key (required) and, optionally, an ElevenLabs API key. The keys are stored only in that browser's `localStorage` and are sent only to the respective APIs.
 - **Setup link:** Settings → *Copy setup link* creates `https://…/#openai=…&eleven=…`. Opening it saves the keys in that browser and removes them from the address bar. The URL fragment is never sent to the web server and the keys are never stored in the repository. Share the link only privately.
 - Subject presets (context, up to 100 key terms each, and notes rules) live in `subjects.js`.

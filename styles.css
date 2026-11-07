@@ -117,7 +117,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .callout.warn { background: var(--warn); border-left-color: var(--warn-border); }
 .callout.example { background: var(--example); border-left-color: var(--example-border); }
 .callout p { margin: 0.3em 0; }
-.transcript { white-space: pre-wrap; font: inherit; margin: 0; overflow-wrap: anywhere; }
+.transcript { margin: 0; }
 
 .history { list-style: none; padding: 0; margin: 0; }
 .history li {
@@ -209,3 +209,64 @@ dialog summary { cursor: pointer; color: var(--muted); }
 .annotation-body p { margin: 0.3em 0; }
 .annotation-body textarea { margin: 6px 0; }
 .annotation-form { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+
+/* ===== Layout v3: library home + lesson view ===== */
+.upload-card .drop { padding: 22px 16px; margin-bottom: 10px; }
+.upload-card .subject-row { margin-bottom: 12px; }
+.upload-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.upload-foot p { margin: 0; }
+.back-btn { margin-bottom: 12px; }
+.backup { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 10px; }
+.backup summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
+.backup .actions { margin-top: 8px; }
+#libraryEmpty { margin: 4px 0 0; }
+
+/* Table of contents */
+.toc { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.chip {
+  font-size: 0.8rem; padding: 4px 10px; border-radius: 999px;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chip:hover { border-color: var(--accent); }
+.section-tools { display: flex; gap: 16px; justify-content: flex-end; margin-bottom: 8px; font-size: 0.875rem; }
+
+/* Collapsible note sections */
+.notes-intro { margin-bottom: 12px; }
+details.section {
+  border: 1px solid var(--border); border-radius: 10px; margin: 8px 0; background: var(--surface);
+  transition: box-shadow 0.3s;
+}
+details.section > summary {
+  cursor: pointer; padding: 10px 14px; font-weight: 700; font-size: 1.02rem; list-style: none;
+  display: flex; align-items: center; gap: 8px;
+}
+details.section > summary::-webkit-details-marker { display: none; }
+details.section > summary::before { content: "▸"; color: var(--accent); transition: transform 0.15s; }
+details.section[open] > summary::before { transform: rotate(90deg); }
+details.section[open] > summary { border-bottom: 1px solid var(--border); }
+.section-body { padding: 4px 16px 12px; }
+.section-body h3 { scroll-margin-top: 12px; }
+details.section.flash { box-shadow: 0 0 0 3px var(--accent); }
+.notes.own details.section { background: transparent; }
+
+/* Mind map */
+.map-view { margin-top: 4px; }
+.map-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.map-tools .map-hint { flex: 1; min-width: 200px; }
+.map-svg {
+  width: 100%; height: min(70vh, 640px); display: block;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+}
+.map-svg foreignObject { cursor: pointer; }
+.map-svg div { color: var(--text); }
+
+/* Transcript */
+.transcript-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.transcript details.section .section-body { padding-top: 10px; }
+
+@media (max-width: 520px) {
+  .toolbar .actions { width: 100%; }
+  .tabs { width: 100%; }
+  .tabs button { flex: 1; padding: 7px 4px; }
+}

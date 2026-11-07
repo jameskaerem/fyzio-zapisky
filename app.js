@@ -1,7 +1,9 @@
 (function () {
   "use strict";
 
-  const { SUBJECTS, BASE_NOTES_PROMPT, AUTO_CONTEXT, AUTO_TERMS, CLASSIFY_PROMPT } = window.Subjects;
+  const { SUBJECTS, BASE_NOTES_PROMPT, SEGMENT_NOTES_PROMPT, FINAL_PROMPT, AUTO_CONTEXT, AUTO_TERMS, CLASSIFY_PROMPT } = window.Subjects;
+  const SEGMENT_SECONDS = 30 * 60; // long lessons: notes are written per ~30 min segment
+  const SINGLE_CALL_MAX_SECONDS = 40 * 60;
   const UNSORTED = "Nezařazeno";
 
   /* ---------- Settings ---------- */
@@ -64,13 +66,17 @@
     tabNotes: $("tabNotes"), tabTranscript: $("tabTranscript"),
     copyBtn: $("copyBtn"), downloadBtn: $("downloadBtn"), regenBtn: $("regenBtn"),
     librarySection: $("librarySection"), library: $("library"), librarySearch: $("librarySearch"),
-    exportBtn: $("exportBtn"), importInput: $("importInput"),
+    exportBtn: $("exportBtn"), importInput: $("importInput"), libraryEmpty: $("libraryEmpty"),
     editDialog: $("editDialog"), editForm: $("editForm"), editTitle: $("editTitle"),
     editSubject: $("editSubject"), editTopic: $("editTopic"), topicOptions: $("topicOptions"),
     editHeading: $("editHeading"), editContentWrap: $("editContentWrap"), editContent: $("editContent"),
     newNoteBtn: $("newNoteBtn"), newNoteBtn2: $("newNoteBtn2"), ownBadge: $("ownBadge"), tabs: $("tabs"),
     myNotes: $("myNotes"), annotationList: $("annotationList"), annotationForm: $("annotationForm"),
     annotationText: $("annotationText"),
+    homeView: $("homeView"), lessonView: $("lessonView"), backBtn: $("backBtn"),
+    notesPane: $("notesPane"), toc: $("toc"), sectionTools: $("sectionTools"),
+    expandAll: $("expandAll"), collapseAll: $("collapseAll"),
+    tabMap: $("tabMap"), mapView: $("mapView"), mapSvg: $("mapSvg"), mapFit: $("mapFit"), mapExpand: $("mapExpand"),
   };
 
   function saveSettings() {
@@ -380,13 +386,64 @@
     return { topic: clean(topic), title: clean(title), notes };
   }
 
-  async function writeNotes(transcript, subject, model) {
-    const raw = await generateText(model, BASE_NOTES_PROMPT(SUBJECTS[subject], topicsFor(subject)),
-      "Přepis hodiny:\n\n" + transcript, "Psaní zápisků");
-    const parsed = parseNotes(raw);
+  // Group transcript parts (~10 min each) into ~30 min segments
+  function segmentParts(parts) {
+    const segs = [];
+    for (const p of parts) {
+      const last = segs[segs.length - 1];
+      if (last && p.end - last.start <= SEGMENT_SECONDS + 120) {
+        last.end = p.end; last.text += "\n\n" + p.text;
+      } else {
+        segs.push({ start: p.start, end: p.end, text: p.text });
+      }
+    }
+    // A short tail (< 12 min) is merged into the previous segment
+    const tail = segs[segs.length - 1];
+    if (segs.length > 1 && tail.end - tail.start < 12 * 60) {
+      const prev = segs[segs.length - 2];
+      prev.end = tail.end; prev.text += "\n\n" + tail.text;
+      segs.pop();
+    }
+    return segs;
+  }
+
+  // parts: [{start, end, text}] (seconds); onProgress(i, n) is called per segment
+  async function writeNotes(parts, subject, model, onProgress) {
+    const subj = SUBJECTS[subject];
+    const total = parts.length ? parts[parts.length - 1].end : 0;
+    let parsed;
+    if (parts.length <= 1 || total <= SINGLE_CALL_MAX_SECONDS) {
+      onProgress && onProgress(0, 1);
+      const raw = await generateText(model, BASE_NOTES_PROMPT(subj, topicsFor(subject)),
+        "Přepis hodiny:\n\n" + parts.map((p) => p.text).join("\n\n"), "Psaní zápisků");
+      parsed = parseNotes(raw);
+    } else {
+      const segs = segmentParts(parts);
+      const bodies = [];
+      for (let i = 0; i < segs.length; i++) {
+        onProgress && onProgress(i, segs.length + 1);
+        const sg = segs[i];
+        bodies.push(await generateText(model,
+          SEGMENT_NOTES_PROMPT(subj, i + 1, segs.length, fmtMin(sg.start), fmtMin(sg.end)),
+          "Přepis této části:\n\n" + sg.text, `Psaní zápisků (část ${i + 1})`));
+      }
+      onProgress && onProgress(segs.length, segs.length + 1);
+      const sectionNotes = bodies.map((b) => b.replace(/^#\s.*$/m, "").trim()).join("\n\n");
+      const raw = await generateText(model, FINAL_PROMPT(subj, topicsFor(subject)),
+        "Zápisky z celé hodiny:\n\n" + sectionNotes, "Shrnutí hodiny");
+      const fin = parseNotes(raw);
+      // Intro (# title + summary) → detailed sections → key points, test questions, answers
+      const idx = fin.notes.search(/^##\s/m);
+      const intro = idx >= 0 ? fin.notes.slice(0, idx).trim() : fin.notes.trim();
+      const tail = idx >= 0 ? fin.notes.slice(idx).trim() : "";
+      parsed = { topic: fin.topic, title: fin.title, notes: [intro, sectionNotes, tail].filter(Boolean).join("\n\n") };
+    }
     parsed.topic = parsed.topic ? canonicalTopic(subject, parsed.topic) : UNSORTED;
     return parsed;
   }
+
+  // Older lessons have only a transcript string
+  const partsOf = (l) => (l.parts && l.parts.length ? l.parts : [{ start: 0, end: 0, text: l.transcript || "" }]);
 
   /* ---------- Progress UI ---------- */
   const STEP_LABELS = ["Získávám zvuk (v tomto zařízení)", "Přepisuji", "Píšu zápisky"];
@@ -411,8 +468,9 @@
   }
 
   const fmtMin = (sec) => {
-    const m = Math.floor(sec / 60), s = Math.round(sec % 60);
-    return `${m}:${String(s).padStart(2, "0")}`;
+    const t = Math.round(sec), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+    const mm = h ? String(m).padStart(2, "0") : String(m);
+    return `${h ? h + ":" : ""}${mm}:${String(s).padStart(2, "0")}`;
   };
 
   /* ---------- Main pipeline ---------- */
@@ -476,6 +534,7 @@
       el.status.textContent = `${SUBJECTS[subject].label}${settings.subject === "auto" ? " (rozpoznáno)" : ""} · ${statusBase}` +
         (fallbackReason ? " · ⚠️ ElevenLabs selhal, použit záložní OpenAI" : "");
       const transcript = texts.join("\n\n");
+      const parts = chunks.map((c, i) => ({ start: c.startSec, end: c.startSec + c.durationSec, text: texts[i] }));
       current = {
         id: Date.now().toString(36),
         title: file.name.replace(/\.[^.]+$/, ""),
@@ -483,20 +542,21 @@
         subject, topic: UNSORTED,
         engine: fallbackReason ? "fallback" : engine,
         date: new Date().toISOString(),
-        transcript,
+        transcript, parts,
         notes: "",
       };
-      renderResult();
 
       // 3. Notes + title + topic folder
-      setStep(2, `Píšu zápisky (${model})`, 0.85);
-      const out = await writeNotes(transcript, subject, model);
+      setStep(2, `Píšu zápisky (${model})`, 0.82);
+      const out = await writeNotes(parts, subject, model, (i, n) => {
+        setStep(2, n > 1 ? `Píšu zápisky (${model}) – krok ${i + 1} z ${n}` : `Píšu zápisky (${model})`, 0.82 + (0.18 * i) / n);
+      });
       Object.assign(current, { notes: out.notes, topic: out.topic, notesModel: model });
       if (out.title) current.title = out.title;
       await saveCurrent();
-      renderResult();
       setStep(3, null, 1);
       el.status.textContent += " · Hotovo ✓";
+      openLesson(current);
     } catch (e) {
       console.error(e);
       let msg = e && e.message ? e.message : String(e);
@@ -511,6 +571,7 @@
       if (current && current.transcript && !current.notes) {
         await saveCurrent();
         el.status.textContent = "Přepis je uložený. Zápisky můžeš zkusit znovu tlačítkem „Vytvořit zápisky znovu“.";
+        openLesson(current);
       }
     } finally {
       busy = false;
@@ -535,32 +596,222 @@
     return tmp.innerHTML;
   }
 
+  /* ---------- Views: library (home) ↔ lesson ---------- */
+  function showHome(push) {
+    el.homeView.hidden = false;
+    el.lessonView.hidden = true;
+    if (!busy) el.progress.hidden = true; // finished progress card is no longer needed
+    renderLibrary();
+    if (push) window.history.pushState({ view: "home" }, "");
+    window.scrollTo({ top: 0 });
+  }
+
+  function openLesson(l, opts = {}) {
+    current = l;
+    el.homeView.hidden = true;
+    el.lessonView.hidden = false;
+    activeTab = "notes";
+    renderResult();
+    if (opts.push !== false) window.history.pushState({ view: "lesson", id: l.id }, "");
+    window.scrollTo({ top: 0 });
+  }
+
+  el.backBtn.addEventListener("click", () => {
+    if (window.history.state && window.history.state.view === "lesson") window.history.back();
+    else showHome(false);
+  });
+
+  window.addEventListener("popstate", (e) => {
+    const st = e.state || {};
+    if (st.view === "lesson") {
+      const l = lessons.find((x) => x.id === st.id);
+      if (l) { openLesson(l, { push: false }); return; }
+    }
+    showHome(false);
+  });
+
+  /* ---------- Lesson rendering ---------- */
+  // Split notes Markdown into the intro (before the first "## ") and "## " sections (ignores code fences)
+  function splitSections(md) {
+    const lines = md.split("\n");
+    const intro = [], sections = [];
+    let inFence = false, cur = null;
+    for (const line of lines) {
+      if (/^```/.test(line.trim())) inFence = !inFence;
+      const h = !inFence && /^##\s+(.+?)\s*#*$/.exec(line);
+      if (h && !/^###/.test(line)) { cur = { title: h[1].trim(), body: [] }; sections.push(cur); continue; }
+      (cur ? cur.body : intro).push(line);
+    }
+    return { intro: intro.join("\n").trim(), sections: sections.map((x) => ({ title: x.title, body: x.body.join("\n").trim() })) };
+  }
+
+  const ALWAYS_CLOSED = /^(řešení|reseni)/i;
+
+  function renderNotes() {
+    const own = current.kind === "note";
+    el.notesView.classList.toggle("own", own);
+    el.toc.innerHTML = "";
+    if (!current.notes) {
+      el.notesView.innerHTML = `<p class="muted">${own ? "Prázdný zápis – napiš ho přes ✎ Upravit." : "Zápisky se ještě připravují…"}</p>`;
+      el.sectionTools.hidden = true;
+      return;
+    }
+    const { intro, sections } = splitSections(current.notes);
+    el.notesView.innerHTML = "";
+    if (intro) {
+      const d = document.createElement("div");
+      d.className = "notes-intro";
+      d.innerHTML = renderMarkdown(intro.replace(/^#\s+.*$/m, "").trim() || intro);
+      el.notesView.append(d);
+    }
+    el.sectionTools.hidden = sections.length < 2;
+    sections.forEach((sec, i) => {
+      const det = document.createElement("details");
+      det.className = "section";
+      det.id = `sec-${i}`;
+      if (sections.length < 3 && !ALWAYS_CLOSED.test(sec.title)) det.open = true;
+      const sum = document.createElement("summary");
+      sum.textContent = sec.title;
+      const body = document.createElement("div");
+      body.className = "section-body";
+      body.innerHTML = renderMarkdown(sec.body);
+      body.querySelectorAll("h3").forEach((h, j) => { h.id = `sec-${i}-${j}`; });
+      det.append(sum, body);
+      el.notesView.append(det);
+      // Table of contents chip
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chip";
+      chip.textContent = sec.title;
+      chip.addEventListener("click", () => openSection(i));
+      el.toc.append(chip);
+    });
+    el.toc.hidden = true; // collapsed sections already work as the table of contents
+  }
+
+  function openSection(i, j) {
+    setTab("notes");
+    const det = document.getElementById(`sec-${i}`);
+    if (!det) return;
+    det.open = true;
+    const target = (j !== undefined && document.getElementById(`sec-${i}-${j}`)) || det;
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    det.classList.add("flash");
+    setTimeout(() => det.classList.remove("flash"), 1200);
+  }
+
+  el.expandAll.addEventListener("click", () => el.notesView.querySelectorAll("details.section").forEach((d) => {
+    if (!ALWAYS_CLOSED.test(d.querySelector("summary").textContent)) d.open = true;
+  }));
+  el.collapseAll.addEventListener("click", () => el.notesView.querySelectorAll("details.section").forEach((d) => { d.open = false; }));
+
+  function renderTranscript() {
+    el.transcriptView.innerHTML = "";
+    const parts = current.parts && current.parts.length ? current.parts : null;
+    if (!parts || parts.length === 1) {
+      const pre = document.createElement("div");
+      pre.className = "transcript-text";
+      pre.textContent = current.transcript || "";
+      el.transcriptView.append(pre);
+      return;
+    }
+    parts.forEach((p, i) => {
+      const det = document.createElement("details");
+      det.className = "section";
+      const sum = document.createElement("summary");
+      sum.textContent = `Část ${i + 1} · ${fmtMin(p.start)}–${fmtMin(p.end)}`;
+      const body = document.createElement("div");
+      body.className = "transcript-text section-body";
+      body.textContent = p.text;
+      det.append(sum, body);
+      el.transcriptView.append(det);
+    });
+  }
+
+  /* ---------- Mind map (built from the note headings, linked to sections) ---------- */
+  const SKIP_IN_MAP = /^(testové otázky|testove otazky|řešení|reseni|organizační|organizacni)/i;
+  const shorten = (t, n = 60) => (t.length > n ? t.slice(0, n - 1) + "…" : t);
+
+  function buildMindmapData() {
+    const { sections } = splitSections(current.notes || "");
+    const node = (text, target, children = []) => ({
+      content: escapeHtml(shorten(text)), children, payload: { target },
+    });
+    const boldTerms = (md) => [...new Set([...md.matchAll(/\*\*([^*\n]{2,40})\*\*/g)]
+      .map((m) => m[1].replace(/[:：]\s*$/, "").trim())
+      .filter((t) => !/^(klíčové|pozor|příklad|moje poznámka)/i.test(t)))].slice(0, 5);
+    const children = [];
+    sections.forEach((sec, i) => {
+      if (SKIP_IN_MAP.test(sec.title)) return;
+      let kids;
+      if (/^klíčové body/i.test(sec.title)) {
+        kids = sec.body.split("\n").filter((l) => /^\s*[-*]\s+/.test(l)).slice(0, 10)
+          .map((l) => node(l.replace(/^\s*[-*]\s+/, "").replace(/\*\*/g, ""), { i }));
+      } else {
+        const subs = [...sec.body.matchAll(/^###\s+(.+)$/gm)];
+        kids = subs.length
+          ? subs.map((m, j) => {
+            const start = m.index, end = j + 1 < subs.length ? subs[j + 1].index : sec.body.length;
+            return node(m[1].trim(), { i, j }, boldTerms(sec.body.slice(start, end)).map((t) => node(t, { i, j })));
+          })
+          : boldTerms(sec.body).map((t) => node(t, { i }));
+      }
+      children.push(node(sec.title, { i }, kids));
+    });
+    return node(current.title, null, children);
+  }
+
+  let mm = null;
+
+  function renderMindmap() {
+    if (typeof markmap === "undefined" || !markmap.Markmap) {
+      el.mapView.querySelector(".map-hint").textContent = "Mapu se nepodařilo načíst.";
+      return;
+    }
+    const data = buildMindmapData();
+    el.mapSvg.innerHTML = "";
+    mm = markmap.Markmap.create(el.mapSvg, { duration: 300, maxWidth: 260, initialExpandLevel: 2, paddingX: 10 }, data);
+    setTimeout(() => mm && mm.fit(), 350);
+  }
+
+  // Clicking a node's text opens the matching section in the notes
+  el.mapSvg.addEventListener("click", (e) => {
+    const fo = e.target.closest && e.target.closest("foreignObject");
+    if (!fo) return;
+    const g = fo.closest("g.markmap-node");
+    const d = g && window.d3 && d3.select(g).datum();
+    const target = d && (d.payload || (d.data && d.data.payload) || {}).target;
+    if (target) { e.stopPropagation(); openSection(target.i, target.j); }
+  }, true);
+
+  el.mapFit.addEventListener("click", () => mm && mm.fit());
+  el.mapExpand.addEventListener("click", () => {
+    if (!mm) return;
+    const walk = (n) => { n.payload = Object.assign({}, n.payload, { fold: 0 }); (n.children || []).forEach(walk); };
+    walk(mm.state.data);
+    mm.renderData().then(() => mm.fit());
+  });
+
   function renderResult() {
-    if (!current) { el.result.hidden = true; return; }
-    el.result.hidden = false;
+    if (!current) return;
     el.resultTitle.textContent = current.title;
     el.resultPath.textContent = `${subjectLabel(current.subject)} › 📁 ${current.topic || UNSORTED}`;
-    el.resultMeta.textContent = [
-      new Date(current.date).toLocaleDateString("cs-CZ"),
-      current.engine ? ENGINE_LABEL[current.engine] : "",
-      current.notesModel || "",
-    ].filter(Boolean).join(" · ");
     const own = current.kind === "note";
+    el.resultMeta.textContent = own
+      ? new Date(current.date).toLocaleDateString("cs-CZ") +
+        (current.updated ? ` · upraveno ${new Date(current.updated).toLocaleDateString("cs-CZ")}` : "")
+      : [new Date(current.date).toLocaleDateString("cs-CZ"),
+        current.parts && current.parts.length ? `délka ${fmtMin(current.parts[current.parts.length - 1].end)}` : "",
+        current.engine ? ENGINE_LABEL[current.engine] : "",
+        current.notesModel || ""].filter(Boolean).join(" · ");
     el.ownBadge.hidden = !own;
-    el.tabs.hidden = own;
+    el.tabTranscript.hidden = own;
     el.regenBtn.hidden = own;
-    if (own) {
-      el.resultMeta.textContent = new Date(current.date).toLocaleDateString("cs-CZ") +
-        (current.updated ? ` · upraveno ${new Date(current.updated).toLocaleDateString("cs-CZ")}` : "");
-    }
-    el.notesView.classList.toggle("own", own);
-    el.notesView.innerHTML = current.notes
-      ? renderMarkdown(current.notes)
-      : `<p class="muted">${own ? "Prázdný zápis – napiš ho přes ✎ Upravit." : "Zápisky se ještě připravují…"}</p>`;
-    el.transcriptView.textContent = current.transcript || "";
     el.regenBtn.disabled = !current.transcript;
+    renderNotes();
+    renderTranscript();
     renderAnnotations();
-    setTab(own ? "notes" : activeTab);
+    setTab(own && activeTab === "transcript" ? "notes" : activeTab);
   }
 
   /* ---------- Personal notes attached to a lesson ---------- */
@@ -633,17 +884,22 @@
   function setTab(tab) {
     activeTab = tab;
     el.tabNotes.setAttribute("aria-selected", String(tab === "notes"));
+    el.tabMap.setAttribute("aria-selected", String(tab === "map"));
     el.tabTranscript.setAttribute("aria-selected", String(tab === "transcript"));
-    el.notesView.hidden = tab !== "notes";
+    el.notesPane.hidden = tab !== "notes";
+    el.mapView.hidden = tab !== "map";
     el.transcriptView.hidden = tab !== "transcript";
-    el.myNotes.classList.toggle("hidden-tab", tab !== "notes");
-    el.copyBtn.textContent = tab === "notes" ? "Kopírovat zápisky" : "Kopírovat přepis";
+    el.copyBtn.hidden = tab === "map";
+    el.downloadBtn.hidden = tab === "map";
+    el.copyBtn.textContent = tab === "transcript" ? "Kopírovat přepis" : "Kopírovat zápisky";
+    if (tab === "map") renderMindmap();
   }
 
   el.tabNotes.addEventListener("click", () => setTab("notes"));
+  el.tabMap.addEventListener("click", () => setTab("map"));
   el.tabTranscript.addEventListener("click", () => setTab("transcript"));
 
-  const currentText = () => (activeTab === "notes" ? notesWithAnnotations(current) : current.transcript);
+  const currentText = () => (activeTab === "transcript" ? current.transcript : notesWithAnnotations(current));
 
   el.copyBtn.addEventListener("click", async () => {
     if (!current) return;
@@ -657,7 +913,7 @@
 
   el.downloadBtn.addEventListener("click", () => {
     if (!current) return;
-    const isNotes = activeTab === "notes";
+    const isNotes = activeTab !== "transcript";
     const suffix = current.kind === "note" ? " – můj zápis.md" : isNotes ? " – zápisky.md" : " – přepis.txt";
     downloadFile(current.title + suffix, currentText(),
       isNotes ? "text/markdown" : "text/plain");
@@ -682,7 +938,9 @@
       const model = await resolveNotesModel();
       const subject = SUBJECTS[current.subject] ? current.subject
         : (await classifySubject(current.transcript, model)) || "biologie";
-      const out = await writeNotes(current.transcript, subject, model);
+      const out = await writeNotes(partsOf(current), subject, model, (i, n) => {
+        el.regenBtn.textContent = n > 1 ? `Píšu… (${i + 1}/${n})` : "Píšu…";
+      });
       Object.assign(current, { subject, notes: out.notes, notesModel: model });
       if (!current.topic || current.topic === UNSORTED) current.topic = out.topic;
       if (out.title && (!current.title || current.title === (current.fileName || "").replace(/\.[^.]+$/, ""))) {
@@ -760,9 +1018,10 @@
         current.updated = new Date().toISOString();
       }
     }
-    renderResult();
+    const isNew = editMode === "new";
     await saveCurrent();
-    el.result.scrollIntoView({ behavior: "smooth" });
+    if (isNew || el.lessonView.hidden) openLesson(current);
+    else renderResult();
   });
 
   /* ---------- Library ---------- */
@@ -796,8 +1055,10 @@
   const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   function renderLibrary() {
-    el.librarySection.hidden = !lessons.length;
+    el.libraryEmpty.hidden = lessons.length > 0;
+    el.librarySearch.hidden = lessons.length < 4;
     el.library.innerHTML = "";
+    if (!lessons.length) return;
     const q = el.librarySearch.value.trim();
     const visible = lessons.filter((l) => matches(l, q));
     if (!visible.length) {
@@ -838,10 +1099,7 @@
     const marks = (l.kind === "note" ? "✍️ " : "") + ((l.annotations || []).length ? "📝 " : "");
     open.textContent = marks + l.title;
     open.title = l.title;
-    open.addEventListener("click", () => {
-      current = l; renderResult(); renderLibrary();
-      el.result.scrollIntoView({ behavior: "smooth" });
-    });
+    open.addEventListener("click", () => openLesson(l));
     const date = document.createElement("span");
     date.className = "muted small";
     date.textContent = new Date(l.date).toLocaleDateString("cs-CZ");
@@ -853,7 +1111,7 @@
       if (!confirm(`Smazat „${l.title}“? Tohle nejde vrátit zpět.`)) return;
       await LessonDB.remove(l.id);
       lessons = lessons.filter((x) => x.id !== l.id);
-      if (current && current.id === l.id) { current = null; renderResult(); }
+      if (current && current.id === l.id) current = null;
       renderLibrary();
     });
     li.append(open, date, del);
@@ -957,6 +1215,6 @@
   loadLessons().then((all) => {
     lessons = all;
     renderLibrary();
-    if (lessons[0] && !current) { current = lessons[0]; renderResult(); renderLibrary(); }
+    window.history.replaceState({ view: "home" }, "");
   }).catch((e) => showError("Nepodařilo se načíst uložené hodiny: " + e.message));
 })();

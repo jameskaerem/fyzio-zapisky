@@ -168,6 +168,48 @@ Na konec přidej:
 - "## Testové otázky" – 5 otázek ve stylu přijímacích testů (výběr ze 4 možností a–d) k probranému učivu,
 - "## Řešení" se správnými odpověďmi a jednovětým vysvětlením.`;
 
+  /* ---------- Long lessons (map–reduce) ----------
+   * Each ~30 min segment gets its own detailed notes (sections only);
+   * a final call writes title/topic, summary, key points and test questions. */
+  const COMMON_RULES = `- Důležité definice, pravidla a vzorce dej do calloutu: řádek začínající "> 💡 **Klíčové:** ".
+- Časté chyby a záludnosti z testů: "> ⚠️ **Pozor:** ". Řešené příklady: "> 🧪 **Příklad:** ".
+- Klíčové pojmy při prvním výskytu zvýrazni **tučně**.
+- Opravuj zjevné chyby automatického přepisu v odborných pojmech, ale nevymýšlej nic, co v hodině nezaznělo. Pokud si nejsi jistý, napiš „(nejasné v záznamu)“.
+- Vynech organizační řeči a odbočky.`;
+
+  const SEGMENT_NOTES_PROMPT = (subject, index, total, from, to) => `Jsi pečlivý asistent, který připravuje studentku na přijímací zkoušky na vysokou školu, obor fyzioterapie. Dostaneš automatický přepis ČÁSTI ${index} z ${total} dlouhé české výukové hodiny předmětu ${subject.label} (čas ${from}–${to}).
+
+Vytvoř podrobné studijní zápisky v češtině ve formátu Markdown POUZE k této části:
+- Začni rovnou sekcemi "## <výstižný název tématu>" – podle toho, kolik témat v této části zaznělo (obvykle 1–4). Uvnitř používej "###".
+- NEPIŠ úvodní nadpis "#", shrnutí celé hodiny, klíčové body ani testové otázky – ty vzniknou zvlášť.
+- Pokud část začíná nebo končí uprostřed tématu, prostě na něj navaž.
+- Zadané úkoly, testy a termíny uveď v sekci "## Organizační informace" (jen pokud zazněly).
+${COMMON_RULES}
+
+Pravidla pro předmět ${subject.label}:
+${subject.notesRules}`;
+
+  const FINAL_PROMPT = (subject, existingTopics) => `Jsi pečlivý asistent, který připravuje studentku na přijímací zkoušky na vysokou školu, obor fyzioterapie. Dostaneš hotové studijní zápisky z celé dlouhé hodiny předmětu ${subject.label} (po částech). Doplň k nim úvod a závěr.
+
+Výstup MUSÍ začínat přesně těmito dvěma řádky metadat a oddělovačem:
+TÉMA: <název složky – širší tematický celek předmětu>
+NÁZEV: <název hodiny>
+---
+
+Pravidla pro metadata:
+- TÉMA je širší celek podle osnov přijímaček (např. chemie: "Anorganické názvosloví", "Biochemie – bílkoviny"; somatologie: "Pohybová soustava – kosti", "Oběhová soustava"; fyzika: "Mechanika – síly a pohyb"; biologie: "Genetika", "Buňka").
+- Existující složky předmětu ${subject.label}:
+${topicList(existingTopics)}
+- Pokud hodina patří do některé existující složky, použij PŘESNĚ její název. Novou složku vytvoř jen tehdy, když žádná nesedí.
+- NÁZEV piš ve tvaru "<Hlavní téma> – <konkrétní obsah>", stručně (max. 70 znaků), bez slova "hodina" a bez data.
+
+Za oddělovačem napiš POUZE:
+1. "# <název hodiny>" a pod ním shrnutí celé hodiny (3–6 vět) a přehled probraných témat jako krátký seznam.
+2. "## Klíčové body" (8–15 odrážek za celou hodinu).
+3. "## Testové otázky" – 8 otázek ve stylu přijímacích testů (výběr ze 4 možností a–d) napříč celou hodinou.
+4. "## Řešení" se správnými odpověďmi a jednovětým vysvětlením.
+Samotné zápisky znovu NEOPISUJ.`;
+
   // Used for the first audio part while the subject is still unknown
   const AUTO_CONTEXT =
     "Výuková hodina v češtině, příprava na přijímací zkoušky na fyzioterapii. Předmět je chemie, fyzika, " +
@@ -178,5 +220,7 @@ Na konec přidej:
 Somatologie = anatomie a fyziologie člověka (kosti, svaly, orgány, soustavy). Biologie = obecná biologie, buňka, genetika, ekologie, evoluce, mikroorganismy.
 Odpověz pouze jedním slovem z možností, malými písmeny, bez diakritiky navíc.`;
 
-  window.Subjects = { SUBJECTS, BASE_NOTES_PROMPT, AUTO_CONTEXT, AUTO_TERMS, CLASSIFY_PROMPT };
+  window.Subjects = {
+    SUBJECTS, BASE_NOTES_PROMPT, SEGMENT_NOTES_PROMPT, FINAL_PROMPT, AUTO_CONTEXT, AUTO_TERMS, CLASSIFY_PROMPT,
+  };
 })();

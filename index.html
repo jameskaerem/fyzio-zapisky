@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fyzio zápisky</title>
   <meta name="description" content="Přepis nahraných hodin a strukturované studijní zápisky pro přípravu na přijímačky na fyzioterapii.">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🩺</text></svg>">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -17,83 +17,122 @@
   </header>
 
   <main class="wrap">
-    <div id="keyWarning" class="notice" hidden>
-      Nejdřív vlož OpenAI API klíč. <button type="button" class="link">Otevřít nastavení</button>
-    </div>
-
-    <div id="setupNotice" class="notice ok" hidden>
-      ✓ API klíče jsou uložené v tomto prohlížeči. Už je nemusíš znovu zadávat.
-    </div>
-
-    <div class="subject-row">
-      <span class="muted small">Předmět</span>
-      <div id="subjects" class="subjects" role="radiogroup" aria-label="Předmět"></div>
-    </div>
-
-    <label id="drop" class="drop">
-      <input id="fileInput" type="file" accept="video/*,audio/*">
-      <strong>Přetáhni sem video z hodiny</strong>
-      <span>nebo klikni a vyber soubor · MP4, MOV, WebM, MP3, M4A…</span>
-      <span class="muted small">Video zůstává v tomto zařízení. K přepisu se odesílá jen malý zvukový soubor.</span>
-    </label>
-    <p id="engineInfo" class="muted small engine-info"></p>
-    <div class="own-note-row">
-      <button id="newNoteBtn" type="button" class="ghost">✍️ Napsat vlastní zápis</button>
-    </div>
-
-    <section id="progress" class="card" hidden>
-      <ol id="steps" class="steps"></ol>
-      <div class="track"><div id="bar" class="bar"></div></div>
-      <p id="status" class="muted small"></p>
-    </section>
-
     <p id="error" class="error" role="alert" hidden></p>
 
-    <section id="result" class="card" hidden>
-      <p id="resultPath" class="result-path small"></p>
-      <span id="ownBadge" class="own-badge" hidden>✍️ Můj vlastní zápis</span>
-      <div class="row title-row">
-        <h2 id="resultTitle"></h2>
-        <button id="editBtn" type="button" class="ghost small-btn" title="Přejmenovat nebo přesunout do jiné složky">✎ Upravit</button>
+    <!-- ===== Home: upload + library ===== -->
+    <div id="homeView">
+      <div id="keyWarning" class="notice" hidden>
+        Nejdřív vlož OpenAI API klíč. <button type="button" class="link">Otevřít nastavení</button>
       </div>
-      <p id="resultMeta" class="muted small result-meta"></p>
-      <div class="toolbar">
-        <div id="tabs" class="tabs" role="tablist">
-          <button id="tabNotes" role="tab" type="button" aria-selected="true">Zápisky</button>
-          <button id="tabTranscript" role="tab" type="button" aria-selected="false">Přepis</button>
-        </div>
-        <div class="actions">
-          <button id="copyBtn" type="button">Kopírovat zápisky</button>
-          <button id="downloadBtn" type="button" class="ghost">Stáhnout</button>
-          <button id="regenBtn" type="button" class="ghost">Vytvořit zápisky znovu</button>
-        </div>
-      </div>
-      <article id="notesView" class="notes"></article>
-      <pre id="transcriptView" class="transcript" hidden></pre>
-      <section id="myNotes" class="my-notes">
-        <h3>✍️ Moje poznámky</h3>
-        <div id="annotationList"></div>
-        <form id="annotationForm" class="annotation-form">
-          <textarea id="annotationText" rows="3" placeholder="Přidej vlastní poznámku k této hodině… (funguje **tučně**, - odrážky)"></textarea>
-          <button type="submit">Přidat poznámku</button>
-        </form>
-      </section>
-      <p class="muted small">Tip: „Kopírovat zápisky“ a vložit do Notionu – nadpisy a odrážky zůstanou zachované.</p>
-    </section>
 
-    <section id="librarySection" class="card" hidden>
-      <div class="row library-head">
-        <h2>📚 Knihovna</h2>
-        <div class="actions">
-          <button id="newNoteBtn2" type="button" class="ghost">✍️ Nový zápis</button>
-          <button id="exportBtn" type="button" class="ghost">Zálohovat</button>
-          <label class="ghost button-like">Obnovit ze zálohy<input id="importInput" type="file" accept="application/json,.json" hidden></label>
-        </div>
+      <div id="setupNotice" class="notice ok" hidden>
+        ✓ API klíče jsou uložené v tomto prohlížeči. Už je nemusíš znovu zadávat.
       </div>
-      <input id="librarySearch" type="search" placeholder="Hledat v zápiscích…" aria-label="Hledat v zápiscích">
-      <div id="library" class="library"></div>
-      <p class="muted small">Uloženo jen v tomto prohlížeči. Občas klikni na „Zálohovat“, ať máš kopii.</p>
-    </section>
+
+      <section class="card upload-card">
+        <div class="subject-row">
+          <span class="muted small">Předmět</span>
+          <div id="subjects" class="subjects" role="radiogroup" aria-label="Předmět"></div>
+        </div>
+
+        <label id="drop" class="drop">
+          <input id="fileInput" type="file" accept="video/*,audio/*">
+          <strong>⬆ Nahrát video z hodiny</strong>
+          <span class="small">Přetáhni sem soubor nebo klikni · MP4, MOV, WebM, MP3, M4A…</span>
+          <span class="muted small">Video zůstává v tomto zařízení. K přepisu se odesílá jen malý zvukový soubor.</span>
+        </label>
+        <div class="upload-foot">
+          <p id="engineInfo" class="muted small"></p>
+          <button id="newNoteBtn" type="button" class="ghost small-btn">✍️ Napsat vlastní zápis</button>
+        </div>
+      </section>
+
+      <section id="progress" class="card" hidden>
+        <ol id="steps" class="steps"></ol>
+        <div class="track"><div id="bar" class="bar"></div></div>
+        <p id="status" class="muted small"></p>
+      </section>
+
+      <section id="librarySection" class="card">
+        <div class="row library-head">
+          <h2>📚 Knihovna</h2>
+          <button id="newNoteBtn2" type="button" class="ghost small-btn">✍️ Nový zápis</button>
+        </div>
+        <input id="librarySearch" type="search" placeholder="Hledat v zápiscích…" aria-label="Hledat v zápiscích">
+        <div id="library" class="library"></div>
+        <p id="libraryEmpty" class="muted small" hidden>Zatím tu nic není. Nahraj první video z hodiny výše.</p>
+
+        <details class="backup">
+          <summary>💾 Záloha knihovny</summary>
+          <p class="muted small">
+            Knihovna je uložená jen v tomto prohlížeči. Záloha je jeden soubor se všemi zápisky a poznámkami –
+            hodí se, když přecházíš na jiný počítač nebo kdyby se vymazala data prohlížeče.
+          </p>
+          <div class="actions">
+            <button id="exportBtn" type="button" class="ghost">Stáhnout zálohu</button>
+            <label class="ghost button-like">Nahrát zálohu<input id="importInput" type="file" accept="application/json,.json" hidden></label>
+          </div>
+        </details>
+      </section>
+    </div>
+
+    <!-- ===== Lesson detail ===== -->
+    <div id="lessonView" hidden>
+      <button id="backBtn" type="button" class="ghost back-btn">← Knihovna</button>
+
+      <section id="result" class="card">
+        <p id="resultPath" class="result-path small"></p>
+        <span id="ownBadge" class="own-badge" hidden>✍️ Můj vlastní zápis</span>
+        <div class="row title-row">
+          <h2 id="resultTitle"></h2>
+          <button id="editBtn" type="button" class="ghost small-btn" title="Přejmenovat nebo přesunout do jiné složky">✎ Upravit</button>
+        </div>
+        <p id="resultMeta" class="muted small result-meta"></p>
+
+        <div class="toolbar">
+          <div id="tabs" class="tabs" role="tablist">
+            <button id="tabNotes" role="tab" type="button" aria-selected="true">📝 Zápisky</button>
+            <button id="tabMap" role="tab" type="button" aria-selected="false">🗺️ Mapa</button>
+            <button id="tabTranscript" role="tab" type="button" aria-selected="false">🎙️ Přepis</button>
+          </div>
+          <div class="actions">
+            <button id="copyBtn" type="button" class="small-btn">Kopírovat zápisky</button>
+            <button id="downloadBtn" type="button" class="ghost small-btn">Stáhnout</button>
+            <button id="regenBtn" type="button" class="ghost small-btn">Vytvořit zápisky znovu</button>
+          </div>
+        </div>
+
+        <div id="notesPane">
+          <nav id="toc" class="toc" aria-label="Obsah" hidden></nav>
+          <div id="sectionTools" class="section-tools" hidden>
+            <button id="expandAll" type="button" class="link">Rozbalit vše</button>
+            <button id="collapseAll" type="button" class="link">Sbalit vše</button>
+          </div>
+          <article id="notesView" class="notes"></article>
+
+          <section id="myNotes" class="my-notes">
+            <h3>✍️ Moje poznámky</h3>
+            <div id="annotationList"></div>
+            <form id="annotationForm" class="annotation-form">
+              <textarea id="annotationText" rows="3" placeholder="Přidej vlastní poznámku k této hodině… (funguje **tučně**, - odrážky)"></textarea>
+              <button type="submit">Přidat poznámku</button>
+            </form>
+          </section>
+          <p class="muted small">Tip: „Kopírovat zápisky“ a vložit do Notionu – nadpisy a odrážky zůstanou zachované.</p>
+        </div>
+
+        <div id="mapView" class="map-view" hidden>
+          <div class="map-tools">
+            <span class="map-hint muted small">Klikni na kolečko pro rozbalení větve, na text pro otevření sekce v zápiscích.</span>
+            <button id="mapExpand" type="button" class="ghost small-btn">Rozbalit vše</button>
+            <button id="mapFit" type="button" class="ghost small-btn">Přizpůsobit</button>
+          </div>
+          <svg id="mapSvg" class="map-svg"></svg>
+        </div>
+
+        <div id="transcriptView" class="transcript" hidden></div>
+      </section>
+    </div>
   </main>
 
   <dialog id="settingsDialog">
@@ -145,7 +184,7 @@
         <datalist id="topicOptions"></datalist>
       </label>
       <label id="editContentWrap" hidden>Text zápisu
-        <textarea id="editContent" rows="12" placeholder="Napiš svůj zápis… (funguje # nadpis, **tučně**, - odrážky)"></textarea>
+        <textarea id="editContent" rows="12" placeholder="Napiš svůj zápis… (funguje # nadpis, ## sekce, **tučně**, - odrážky)"></textarea>
       </label>
       <div class="dialog-actions">
         <button type="submit" value="cancel" class="ghost" formnovalidate>Zrušit</button>
@@ -157,6 +196,8 @@
   <script src="vendor/mp4box.all.min.js"></script>
   <script src="vendor/marked.min.js"></script>
   <script src="vendor/purify.min.js"></script>
+  <script src="vendor/d3.min.js"></script>
+  <script src="vendor/markmap-view.js"></script>
   <script src="subjects.js"></script>
   <script src="db.js"></script>
   <script src="audio.js"></script>
