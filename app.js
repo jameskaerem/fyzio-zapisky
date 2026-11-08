@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const { SUBJECTS, BASE_NOTES_PROMPT, SEGMENT_NOTES_PROMPT, FINAL_PROMPT, AUTO_CONTEXT, AUTO_TERMS, CLASSIFY_PROMPT } = window.Subjects;
+  const { SUBJECTS, BASE_NOTES_PROMPT, SEGMENT_NOTES_PROMPT, FINAL_PROMPT, QUIZ_PROMPT, AUTO_CONTEXT, AUTO_TERMS, CLASSIFY_PROMPT } = window.Subjects;
   const SEGMENT_SECONDS = 30 * 60; // long lessons: notes are written per ~30 min segment
   const SINGLE_CALL_MAX_SECONDS = 40 * 60;
   const UNSORTED = "Nezařazeno";
@@ -79,6 +79,7 @@
     expandAll: $("expandAll"), collapseAll: $("collapseAll"),
     mapPreview: $("mapPreview"), mapPreviewTitle: $("mapPreviewTitle"), mapPreviewBody: $("mapPreviewBody"),
     mapPreviewOpen: $("mapPreviewOpen"), mapPreviewClose: $("mapPreviewClose"),
+    tabQuiz: $("tabQuiz"), quizView: $("quizView"), backToQuiz: $("backToQuiz"),
     tabMap: $("tabMap"), mapView: $("mapView"), mapSvg: $("mapSvg"), mapFit: $("mapFit"), mapExpand: $("mapExpand"),
   };
 
@@ -557,6 +558,13 @@
       Object.assign(current, { notes: out.notes, topic: out.topic, notesModel: model });
       if (out.title) current.title = out.title;
       await saveCurrent();
+      setStep(2, "Vytvářím kvíz…", 0.97);
+      try {
+        current.quiz = await generateQuiz(current, model);
+        await saveCurrent();
+      } catch (qe) {
+        console.warn("Quiz generation failed:", qe); // not fatal – it can be created later in the Quiz tab
+      }
       setStep(3, null, 1);
       el.status.textContent += " · Hotovo ✓";
       openLesson(current);
@@ -611,6 +619,7 @@
 
   function openLesson(l, opts = {}) {
     current = l;
+    el.backToQuiz.hidden = true;
     el.homeView.hidden = true;
     el.lessonView.hidden = false;
     activeTab = "notes";
@@ -840,6 +849,289 @@
     Promise.resolve(mm.renderData()).then(() => setTimeout(() => mm.fit(), 300));
   });
 
+  /* ---------- Quiz ---------- */
+  let quizRun = null;   // { lessonId, order, perms, i, answers, selected, checked, onlyWrong, done }
+  let quizBusy = false;
+  const LETTERS = "ABCDEF";
+  const NOT_FOR_QUIZ = /^(testové otázky|testove otazky|řešení|reseni|organizační|organizacni)/i;
+
+  function quizSectionTitles(notes) {
+    return splitSections(notes || "").sections.map((x) => x.title).filter((t) => !NOT_FOR_QUIZ.test(plain(t)));
+  }
+
+  function parseJsonLoose(text) {
+    const t = text.replace(/^\s*```(?:json)?/i, "").replace(/```\s*$/, "");
+    return JSON.parse(t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1));
+  }
+
+  function normalizeQuestion(q) {
+    if (!q || typeof q.question !== "string" || !Array.isArray(q.options)) return null;
+    let options = q.options.map((o) => String(o).trim()).filter(Boolean);
+    let type = ["single", "multiple", "truefalse"].includes(q.type) ? q.type : "single";
+    if (type === "truefalse") options = ["Pravda", "Nepravda"];
+    if (options.length < 2 || options.length > 6) return null;
+    const correct = [...new Set((Array.isArray(q.correct) ? q.correct : [q.correct]).map(Number))]
+      .filter((n) => Number.isInteger(n) && n >= 0 && n < options.length);
+    if (!correct.length) return null;
+    if (type === "single" && correct.length > 1) type = "multiple";
+    if (type === "multiple" && correct.length === 1) type = "single";
+    return {
+      type, options, correct,
+      question: q.question.trim(),
+      explanation: String(q.explanation || "").trim(),
+      section: String(q.section || "").trim(),
+    };
+  }
+
+  async function generateQuiz(l, model) {
+    const titles = quizSectionTitles(l.notes);
+    const duration = l.parts && l.parts.length ? l.parts[l.parts.length - 1].end : 0;
+    const count = duration > 50 * 60 ? 12 : 10;
+    // Old notes may contain their own test questions – leave them out so answers don't leak
+    const notes = splitSections(l.notes || "");
+    const md = [notes.intro, ...notes.sections.filter((x) => !NOT_FOR_QUIZ.test(plain(x.title)))
+      .map((x) => `## ${x.title}\n\n${x.body}`)].join("\n\n");
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const raw = await generateText(model, QUIZ_PROMPT(SUBJECTS[l.subject], titles, count),
+        "Studijní zápisky:\n\n" + md, "Vytváření kvízu");
+      try {
+        const questions = (parseJsonLoose(raw).questions || []).map(normalizeQuestion).filter(Boolean);
+        if (questions.length >= 3) return { created: new Date().toISOString(), model, questions };
+      } catch (e) { console.warn("Quiz JSON parse failed:", e); }
+    }
+    throw new Error("Kvíz se nepodařilo vytvořit. Zkus to prosím znovu.");
+  }
+
+  function findSectionIndex(title) {
+    if (!title) return -1;
+    const norm = (t) => stripDiacritics(plain(t)).toLowerCase().replace(/\s+/g, " ").trim();
+    const secs = splitSections(current.notes || "").sections.map((x) => norm(x.title));
+    const want = norm(title);
+    let i = secs.indexOf(want);
+    if (i < 0) i = secs.findIndex((t) => t && (t.includes(want) || want.includes(t)));
+    return i;
+  }
+
+  const shuffle = (arr) => {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  };
+
+  function startQuiz(onlyIdx) {
+    const qs = current.quiz.questions;
+    const idx = onlyIdx || qs.map((_, i) => i);
+    quizRun = {
+      lessonId: current.id,
+      order: onlyIdx ? shuffle(idx) : idx, // full quiz follows the lesson order
+      perms: Object.fromEntries(idx.map((qi) => [qi,
+        qs[qi].type === "truefalse" ? qs[qi].options.map((_, k) => k) : shuffle(qs[qi].options.map((_, k) => k))])),
+      i: 0, answers: [], selected: new Set(), checked: false, onlyWrong: !!onlyIdx, done: false,
+    };
+    renderQuiz();
+  }
+
+  async function createQuiz() {
+    if (quizBusy) return;
+    if (!settings.openaiKey) { el.settingsBtn.click(); return; }
+    quizBusy = true;
+    renderQuiz();
+    try {
+      current.quiz = await generateQuiz(current, await resolveNotesModel());
+      quizRun = null;
+      await saveCurrent();
+    } catch (e) {
+      showError(e.message);
+    } finally {
+      quizBusy = false;
+      if (activeTab === "quiz") renderQuiz();
+    }
+  }
+
+  function h(tag, cls, html) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (html !== undefined) n.innerHTML = html;
+    return n;
+  }
+
+  function btn(label, cls, onClick) {
+    const b = h("button", cls);
+    b.type = "button";
+    b.textContent = label;
+    b.addEventListener("click", onClick);
+    return b;
+  }
+
+  // Inline Markdown (bold, formulas…) without wrapping <p>
+  const inlineMd = (t) => DOMPurify.sanitize(marked.parseInline(t || ""));
+
+  function renderQuiz() {
+    const v = el.quizView;
+    v.innerHTML = "";
+    if (!current.notes) {
+      v.append(h("p", "muted", "Kvíz půjde vytvořit, až budou hotové zápisky."));
+      return;
+    }
+    if (quizBusy) {
+      v.append(h("div", "quiz-card quiz-center", '<div class="spinner"></div><p>Připravuji otázky ze zápisků…</p>'));
+      return;
+    }
+    if (!current.quiz || !current.quiz.questions || !current.quiz.questions.length) {
+      const c = h("div", "quiz-card quiz-center",
+        "<div class=\"quiz-hero\">🎯</div><h3>Kvíz k této hodině zatím není</h3>" +
+        "<p class=\"muted\">Vytvoří se z hotových zápisků: otázky A–D, „vyber všechny správné“ a pravda/nepravda, s vysvětlením.</p>");
+      c.append(btn("✨ Vytvořit kvíz", "", createQuiz));
+      v.append(c);
+      return;
+    }
+    if (!quizRun || quizRun.lessonId !== current.id) return renderQuizStart(v);
+    if (quizRun.done) return renderQuizResults(v);
+    renderQuestion(v);
+  }
+
+  function renderQuizStart(v) {
+    const q = current.quiz.questions;
+    const types = { single: 0, multiple: 0, truefalse: 0 };
+    q.forEach((x) => { types[x.type]++; });
+    const st = current.quizStats;
+    const c = h("div", "quiz-card quiz-center");
+    c.innerHTML = `<div class="quiz-hero">🎯</div><h3>Kvíz k hodině</h3>
+      <p class="muted">${q.length} ${q.length === 1 ? "otázka" : q.length < 5 ? "otázky" : "otázek"} · ${types.single} × A–D · ${types.multiple} × více správných · ${types.truefalse} × pravda/nepravda</p>
+      ${st ? `<p class="quiz-best">Nejlepší výsledek: <strong>${st.best} %</strong> · pokusů: ${st.attempts}</p>` : ""}`;
+    const row = h("div", "quiz-actions");
+    row.append(btn("▶ Spustit kvíz", "", () => startQuiz()));
+    row.append(btn("🔄 Nové otázky", "ghost", () => {
+      if (confirm("Vytvořit úplně nové otázky? (stojí pár centů)")) createQuiz();
+    }));
+    c.append(row);
+    v.append(c);
+  }
+
+  function renderQuestion(v) {
+    const r = quizRun, qs = current.quiz.questions;
+    const qi = r.order[r.i], q = qs[qi], perm = r.perms[qi];
+    const card = h("div", "quiz-card");
+    const top = h("div", "quiz-top");
+    top.innerHTML = `<span>Otázka ${r.i + 1} z ${r.order.length}${r.onlyWrong ? " · opakování chybných" : ""}</span>
+      <span class="quiz-type">${q.type === "multiple" ? "☑ více správných" : q.type === "truefalse" ? "⚖ pravda / nepravda" : "◉ jedna správná"}</span>`;
+    const bar = h("div", "quiz-progress", `<div style="width:${(r.i / r.order.length) * 100}%"></div>`);
+    card.append(top, bar, h("h3", "quiz-q", inlineMd(q.question)));
+
+    const list = h("div", "quiz-options");
+    perm.forEach((orig, pos) => {
+      const o = h("button", "quiz-option");
+      o.type = "button";
+      o.innerHTML = `<span class="quiz-letter">${q.type === "truefalse" ? (orig === 0 ? "✓" : "✗") : LETTERS[pos]}</span><span>${inlineMd(q.options[orig])}</span>`;
+      if (r.selected.has(orig)) o.classList.add("selected");
+      if (r.checked) {
+        o.disabled = true;
+        if (q.correct.includes(orig)) o.classList.add(r.selected.has(orig) ? "correct" : "missed");
+        else if (r.selected.has(orig)) o.classList.add("wrong");
+      } else {
+        o.addEventListener("click", () => {
+          if (q.type === "multiple") {
+            if (r.selected.has(orig)) r.selected.delete(orig); else r.selected.add(orig);
+            renderQuiz();
+          } else {
+            r.selected = new Set([orig]);
+            checkAnswer();
+          }
+        });
+      }
+      list.append(o);
+    });
+    card.append(list);
+
+    if (!r.checked && q.type === "multiple") {
+      const b = btn("Zkontrolovat", "", checkAnswer);
+      b.disabled = !r.selected.size;
+      const row = h("div", "quiz-actions");
+      row.append(b);
+      card.append(row);
+    }
+
+    if (r.checked) {
+      const ok = r.answers[r.answers.length - 1].ok;
+      const fb = h("div", "quiz-feedback " + (ok ? "ok" : "bad"));
+      const correctLabels = perm.map((orig, pos) => (q.correct.includes(orig)
+        ? (q.type === "truefalse" ? q.options[orig] : `${LETTERS[pos]} – ${inlineMd(q.options[orig])}`) : null)).filter(Boolean);
+      fb.innerHTML = `<strong>${ok ? "✅ Správně!" : "❌ Tohle nevyšlo."}</strong>` +
+        (ok ? "" : ` Správně: <strong>${correctLabels.join(", ")}</strong>`) +
+        (q.explanation ? `<p>${inlineMd(q.explanation)}</p>` : "");
+      const actions = h("div", "quiz-actions");
+      const si = findSectionIndex(q.section);
+      if (si >= 0) actions.append(btn("📖 Ukázat v zápiscích", "ghost", () => jumpFromQuiz(si)));
+      actions.append(btn(r.i + 1 < r.order.length ? "Další otázka →" : "Zobrazit výsledek 🏁", "", nextQuestion));
+      fb.append(actions);
+      card.append(fb);
+    }
+    v.append(card);
+  }
+
+  function checkAnswer() {
+    const r = quizRun, q = current.quiz.questions[r.order[r.i]];
+    const sel = [...r.selected].sort(), cor = [...q.correct].sort();
+    const ok = sel.length === cor.length && sel.every((x, k) => x === cor[k]);
+    r.answers.push({ qi: r.order[r.i], ok });
+    r.checked = true;
+    renderQuiz();
+  }
+
+  async function nextQuestion() {
+    const r = quizRun;
+    r.i++;
+    r.selected = new Set();
+    r.checked = false;
+    if (r.i >= r.order.length) {
+      r.done = true;
+      if (!r.onlyWrong) {
+        const pct = Math.round((r.answers.filter((a) => a.ok).length / r.order.length) * 100);
+        const st = current.quizStats || { best: 0, attempts: 0 };
+        current.quizStats = { best: Math.max(st.best, pct), attempts: st.attempts + 1, last: { pct, date: new Date().toISOString() } };
+        await saveCurrent();
+      }
+    }
+    renderQuiz();
+    el.quizView.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function renderQuizResults(v) {
+    const r = quizRun, qs = current.quiz.questions;
+    const good = r.answers.filter((a) => a.ok).length, total = r.order.length;
+    const pct = Math.round((good / total) * 100);
+    const msg = pct >= 90 ? "🏆 Výborně, tohle umíš!" : pct >= 70 ? "👍 Dobrá práce!" : pct >= 50 ? "💪 Už to bude, ještě trochu procvičit." : "📚 Vrať se k zápiskům a zkus to znovu.";
+    const c = h("div", "quiz-card quiz-center");
+    c.innerHTML = `<div class="quiz-score" style="--p:${pct}"><span>${pct}<small>%</small></span></div>
+      <h3>${msg}</h3><p class="muted">${good} z ${total} správně${r.onlyWrong ? " (opakování chybných)" : ""}</p>`;
+    const wrong = r.answers.filter((a) => !a.ok).map((a) => a.qi);
+    const row = h("div", "quiz-actions");
+    if (wrong.length) row.append(btn(`🔁 Procvičit chybné (${wrong.length})`, "", () => startQuiz(wrong)));
+    row.append(btn("🔄 Celý kvíz znovu", wrong.length ? "ghost" : "", () => startQuiz()));
+    c.append(row);
+    v.append(c);
+    if (wrong.length) {
+      const box = h("div", "quiz-card");
+      box.append(h("h3", "", "Na co se podívat znovu"));
+      for (const qi of wrong) {
+        const q = qs[qi];
+        const item = h("div", "quiz-review");
+        item.innerHTML = `<p class="quiz-review-q">${inlineMd(q.question)}</p>
+          <p class="small">Správně: <strong>${q.correct.map((k) => inlineMd(q.options[k])).join(" · ")}</strong></p>`;
+        const si = findSectionIndex(q.section);
+        if (si >= 0) item.append(btn(`📖 ${plain(splitSections(current.notes).sections[si].title)}`, "link", () => jumpFromQuiz(si)));
+        box.append(item);
+      }
+      v.append(box);
+    }
+  }
+
+  function jumpFromQuiz(sectionIndex) {
+    openSection(sectionIndex);
+    el.backToQuiz.hidden = false;
+  }
+  el.backToQuiz.addEventListener("click", () => setTab("quiz"));
+
   function renderResult() {
     if (!current) return;
     el.lessonView.dataset.subject = current.subject || "";
@@ -934,19 +1226,24 @@
     activeTab = tab;
     el.tabNotes.setAttribute("aria-selected", String(tab === "notes"));
     el.tabMap.setAttribute("aria-selected", String(tab === "map"));
+    el.tabQuiz.setAttribute("aria-selected", String(tab === "quiz"));
+    el.quizView.hidden = tab !== "quiz";
     el.tabTranscript.setAttribute("aria-selected", String(tab === "transcript"));
     el.notesPane.hidden = tab !== "notes";
     el.mapView.hidden = tab !== "map";
     el.transcriptView.hidden = tab !== "transcript";
-    el.copyBtn.hidden = tab === "map";
-    el.pdfBtn.hidden = tab === "transcript";
-    el.downloadBtn.hidden = tab === "map";
+    el.copyBtn.hidden = tab === "map" || tab === "quiz";
+    el.pdfBtn.hidden = tab === "transcript" || tab === "quiz";
+    el.downloadBtn.hidden = tab === "map" || tab === "quiz";
+    if (tab !== "notes") el.backToQuiz.hidden = true;
     el.copyBtn.textContent = tab === "transcript" ? "Kopírovat přepis" : "Kopírovat zápisky";
     if (tab === "map") renderMindmap();
+    if (tab === "quiz") renderQuiz();
   }
 
   el.tabNotes.addEventListener("click", () => setTab("notes"));
   el.tabMap.addEventListener("click", () => setTab("map"));
+  el.tabQuiz.addEventListener("click", () => setTab("quiz"));
   el.tabTranscript.addEventListener("click", () => setTab("transcript"));
 
   const currentText = () => (activeTab === "transcript" ? current.transcript : notesWithAnnotations(current));
@@ -1017,6 +1314,12 @@
         current.title = out.title;
       }
       await saveCurrent();
+      el.regenBtn.textContent = "Kvíz…";
+      try {
+        current.quiz = await generateQuiz(current, model);
+        quizRun = null;
+        await saveCurrent();
+      } catch (qe) { console.warn("Quiz generation failed:", qe); }
       setTab("notes");
       renderResult();
     } catch (e) {
@@ -1206,6 +1509,13 @@
     const date = document.createElement("span");
     date.className = "muted small";
     date.textContent = new Date(l.date).toLocaleDateString("cs-CZ");
+    if (l.quizStats && l.quizStats.best != null) {
+      const b = document.createElement("span");
+      b.className = "quiz-badge";
+      b.title = "Nejlepší výsledek v kvízu";
+      b.textContent = `🎯 ${l.quizStats.best} %`;
+      li.append(b);
+    }
     const del = document.createElement("button");
     del.className = "icon";
     del.title = "Smazat";

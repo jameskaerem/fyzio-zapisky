@@ -164,10 +164,7 @@ Obecná pravidla pro zápisky:
 Pravidla pro předmět ${subject.label}:
 ${subject.notesRules}
 
-Na konec přidej:
-- "## 🔑 Klíčové body" (5–10 odrážek),
-- "## 📝 Testové otázky" – 5 otázek ve stylu přijímacích testů (výběr ze 4 možností a–d) k probranému učivu,
-- "## ✅ Řešení" se správnými odpověďmi a jednovětým vysvětlením.`;
+Na konec přidej "## 🔑 Klíčové body" (5–10 odrážek). Testové otázky NEPIŠ – kvíz vzniká zvlášť.`;
 
   /* ---------- Long lessons (map–reduce) ----------
    * Each ~30 min segment gets its own detailed notes (sections only);
@@ -208,9 +205,30 @@ ${topicList(existingTopics)}
 Za oddělovačem napiš POUZE:
 1. "# <název hodiny>" a pod ním shrnutí celé hodiny (3–6 vět) a přehled probraných témat jako krátký seznam.
 2. "## 🔑 Klíčové body" (8–15 odrážek za celou hodinu).
-3. "## 📝 Testové otázky" – 8 otázek ve stylu přijímacích testů (výběr ze 4 možností a–d) napříč celou hodinou.
-4. "## ✅ Řešení" se správnými odpověďmi a jednovětým vysvětlením.
-Samotné zápisky znovu NEOPISUJ.`;
+Samotné zápisky znovu NEOPISUJ a testové otázky NEPIŠ – kvíz vzniká zvlášť.`;
+
+  /* ---------- Quiz ---------- */
+  const QUIZ_PROMPT = (subject, sectionTitles, count) => `Jsi zkoušející, který připravuje studentku na přijímací zkoušky na vysokou školu, obor fyzioterapie. Ze studijních zápisků předmětu ${subject ? subject.label : ""} vytvoř procvičovací kvíz o ${count} otázkách.
+
+Pravidla:
+- Ptej se jen na učivo, které je v zápiscích. Ověřuj porozumění a souvislosti, ne jen bezvýznamné drobnosti.
+- Kombinuj typy otázek (zhruba 60 % "single", 25 % "multiple", 15 % "truefalse"):
+  - "single": 4 možnosti, právě 1 správná.
+  - "multiple": 4–5 možností, 2–3 správné; zadání končí "(Vyber všechny správné.)".
+  - "truefalse": možnosti přesně ["Pravda", "Nepravda"], tvrzení v zadání.
+- Špatné možnosti musí být věrohodné – typické chyby a záměny studentů (např. podobné pojmy, opačný směr, špatná jednotka).
+- Neprozrazuj odpověď v zadání, nepoužívej "všechny výše uvedené".
+- "explanation": 1–3 věty, proč je správná odpověď správná a kde je chyták.
+- "section": PŘESNĚ jeden název sekce ze seznamu níže, ze které otázka vychází.
+- Vzorce piš s indexy v Unicode (H₂SO₄, Na⁺).
+- Otázky seřaď podle pořadí sekcí v zápiscích.
+
+Názvy sekcí:
+${sectionTitles.map((t) => "- " + t).join("\n")}
+
+Výstup: POUZE platný JSON bez dalšího textu, v tomto tvaru:
+{"questions":[{"type":"single","question":"…","options":["…","…","…","…"],"correct":[2],"explanation":"…","section":"…"}]}
+Indexy v "correct" počítej od 0.`;
 
   // Used for the first audio part while the subject is still unknown
   const AUTO_CONTEXT =
@@ -223,6 +241,6 @@ Somatologie = anatomie a fyziologie člověka (kosti, svaly, orgány, soustavy).
 Odpověz pouze jedním slovem z možností, malými písmeny, bez diakritiky navíc.`;
 
   window.Subjects = {
-    SUBJECTS, BASE_NOTES_PROMPT, SEGMENT_NOTES_PROMPT, FINAL_PROMPT, AUTO_CONTEXT, AUTO_TERMS, CLASSIFY_PROMPT,
+    SUBJECTS, BASE_NOTES_PROMPT, SEGMENT_NOTES_PROMPT, FINAL_PROMPT, QUIZ_PROMPT, AUTO_CONTEXT, AUTO_TERMS, CLASSIFY_PROMPT,
   };
 })();

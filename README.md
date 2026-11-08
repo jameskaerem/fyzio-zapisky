@@ -13,7 +13,7 @@ A small static web app (UI in Czech) that turns recorded Czech lessons into a tr
    - **OpenAI `gpt-transcribe`**: requests send `language=cs`, the subject context as `prompt`, the terms as `keywords`, and the end of the previous part so the text stays continuous.
    - If either API rejects the term field, the request is retried without it.
    - **Automatic fallback**: if ElevenLabs fails for any part (credit or limit exhausted, invalid key, outage), that part and the remaining parts are transcribed with OpenAI. The status and the lesson metadata show that the fallback was used.
-4. **Study notes**: written by an OpenAI model. *Auto* picks the strongest general GPT model the key can access via `/v1/models`, skipping mini, nano and luna tiers and the expensive pro and astra tiers. A specific model can also be chosen in Settings. Requests use Chat Completions and fall back to the Responses API if needed. The notes follow subject-specific rules from `subjects.js`: formulas and equations in chemistry, quantities with units in physics, comparison tables and genetics crosses in biology, and Czech + Latin anatomical names in somatology. Every set of notes ends with key points and 5 admission-test-style multiple-choice questions with answers.
+4. **Study notes**: written by an OpenAI model. *Auto* picks the strongest general GPT model the key can access via `/v1/models`, skipping mini, nano and luna tiers and the expensive pro and astra tiers. A specific model can also be chosen in Settings. Requests use Chat Completions and fall back to the Responses API if needed. The notes follow subject-specific rules from `subjects.js`: formulas and equations in chemistry, quantities with units in physics, comparison tables and genetics crosses in biology, and Czech + Latin anatomical names in somatology. Every set of notes ends with key points; test questions live in the interactive quiz.
 5. **Auto-detect subject** (default): the first audio part is transcribed with a mixed term list (25 terms from each subject). A short GPT call then classifies the subject, and the remaining parts use that subject's terms. A subject can also be picked manually.
 6. **Title and folder**: the notes model also returns a lesson title (`<Main topic> – <specific content>`) and a topic folder. It is given the subject's existing folders so names stay consistent, and near-duplicate folder names are merged automatically.
 7. **Library**: lessons are stored in IndexedDB and shown as Subject → Topic folder → Lessons, with search, edit (rename or move to another subject/folder), delete, and JSON export/import for backups. Notes can be copied (they paste cleanly into Notion) or downloaded.
@@ -35,6 +35,12 @@ A small static web app (UI in Czech) that turns recorded Czech lessons into a tr
     - Section headings start with an emoji chosen by the model.
     - In the mind map, each branch uses its section's colour, and clicking a node shows a preview card with an “Open in notes” button.
     - Each subject has an accent colour (chemistry teal, physics orange, biology green, somatology rose).
+14. **Quiz** (🎯 tab):
+    - **Questions**: after the notes are written, a separate GPT call creates 10–12 questions as JSON: single choice (A–D), multiple choice (“select all correct”) and true/false. Each question has an explanation and the notes section it comes from. Older lessons can create a quiz from the tab.
+    - **Answering**: one question at a time with instant feedback (correct, wrong, missed). Options are shuffled on every run.
+    - **After a wrong answer**: “Show in notes” jumps to the section and a “Back to quiz” button returns to the same question.
+    - **Results**: score ring, a list of the missed questions with links, and “Practise wrong ones”. The best score is saved and shown in the library.
+    - **Notes**: they no longer contain test questions.
 
 ## Setup
 
