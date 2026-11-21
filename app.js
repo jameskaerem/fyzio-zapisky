@@ -80,6 +80,8 @@
     mapPreview: $("mapPreview"), mapPreviewTitle: $("mapPreviewTitle"), mapPreviewBody: $("mapPreviewBody"),
     mapPreviewOpen: $("mapPreviewOpen"), mapPreviewClose: $("mapPreviewClose"),
     tabQuiz: $("tabQuiz"), quizView: $("quizView"), backToQuiz: $("backToQuiz"),
+    groupQuizView: $("groupQuizView"), groupBackBtn: $("groupBackBtn"), groupQuiz: $("groupQuiz"),
+    groupQuizPath: $("groupQuizPath"), groupQuizTitle: $("groupQuizTitle"),
     tabMap: $("tabMap"), mapView: $("mapView"), mapSvg: $("mapSvg"), mapFit: $("mapFit"), mapExpand: $("mapExpand"),
   };
 
@@ -611,6 +613,7 @@
   function showHome(push) {
     el.homeView.hidden = false;
     el.lessonView.hidden = true;
+    hideGroupQuiz();
     if (!busy) el.progress.hidden = true; // finished progress card is no longer needed
     renderLibrary();
     if (push) window.history.pushState({ view: "home" }, "");
@@ -621,10 +624,13 @@
     current = l;
     el.backToQuiz.hidden = true;
     el.homeView.hidden = true;
+    hideGroupQuiz();
     el.lessonView.hidden = false;
+    // Opened from a topic quiz: "back" returns to that quiz instead of the library
+    el.backBtn.textContent = opts.fromGroup ? "← Zpět ke kvízu z tématu" : "← Knihovna";
     activeTab = "notes";
     renderResult();
-    if (opts.push !== false) window.history.pushState({ view: "lesson", id: l.id }, "");
+    if (opts.push !== false) window.history.pushState({ view: "lesson", id: l.id, fromGroup: !!opts.fromGroup }, "");
     window.scrollTo({ top: 0 });
   }
 
@@ -637,8 +643,9 @@
     const st = e.state || {};
     if (st.view === "lesson") {
       const l = lessons.find((x) => x.id === st.id);
-      if (l) { openLesson(l, { push: false }); return; }
+      if (l) { openLesson(l, { push: false, fromGroup: st.fromGroup }); return; }
     }
+    if (st.view === "group") { showGroupQuiz(st.key, false); return; }
     showHome(false);
   });
 
@@ -902,10 +909,10 @@
     throw new Error("Kvíz se nepodařilo vytvořit. Zkus to prosím znovu.");
   }
 
-  function findSectionIndex(title) {
-    if (!title) return -1;
+  function findSectionIndex(l, title) {
+    if (!title || !l || !l.notes) return -1;
     const norm = (t) => stripDiacritics(plain(t)).toLowerCase().replace(/\s+/g, " ").trim();
-    const secs = splitSections(current.notes || "").sections.map((x) => norm(x.title));
+    const secs = splitSections(l.notes).sections.map((x) => norm(x.title));
     const want = norm(title);
     let i = secs.indexOf(want);
     if (i < 0) i = secs.findIndex((t) => t && (t.includes(want) || want.includes(t)));
@@ -918,16 +925,27 @@
     return a;
   };
 
+  /* A quiz run works on "items" { l: lesson, qi: index into l.quiz.questions }.
+   * The lesson quiz uses one lesson; the topic/subject quiz mixes questions from several lessons. */
+  // Each item keeps its question object, so a run survives "🔄 Nové otázky" in one of the lessons
+  const qOf = (r, k) => r.items[k].q;
+
+  function newRun(base, items, keys, onlyWrong) {
+    const perms = {};
+    for (const k of keys) {
+      const q = items[k].q;
+      const idx = q.options.map((_, n) => n);
+      perms[k] = q.type === "truefalse" ? idx : shuffle(idx);
+    }
+    return Object.assign({}, base, {
+      items, order: keys, perms, i: 0, answers: [], selected: new Set(), checked: false, onlyWrong: !!onlyWrong, done: false,
+    });
+  }
+
   function startQuiz(onlyIdx) {
-    const qs = current.quiz.questions;
-    const idx = onlyIdx || qs.map((_, i) => i);
-    quizRun = {
-      lessonId: current.id,
-      order: onlyIdx ? shuffle(idx) : idx, // full quiz follows the lesson order
-      perms: Object.fromEntries(idx.map((qi) => [qi,
-        qs[qi].type === "truefalse" ? qs[qi].options.map((_, k) => k) : shuffle(qs[qi].options.map((_, k) => k))])),
-      i: 0, answers: [], selected: new Set(), checked: false, onlyWrong: !!onlyIdx, done: false,
-    };
+    const items = current.quiz.questions.map((q, qi) => ({ l: current, qi, q }));
+    const keys = onlyIdx ? shuffle(onlyIdx) : items.map((_, k) => k); // full quiz follows the lesson order
+    quizRun = newRun({ scope: "lesson", lessonId: current.id }, items, keys, !!onlyIdx);
     renderQuiz();
   }
 
@@ -965,6 +983,8 @@
 
   // Inline Markdown (bold, formulas…) without wrapping <p>
   const inlineMd = (t) => DOMPurify.sanitize(marked.parseInline(t || ""));
+  const questionsWord = (n) => (n === 1 ? "otázka" : n >= 2 && n <= 4 ? "otázky" : "otázek");
+  const lessonsWord = (n) => (n === 1 ? "hodina" : n >= 2 && n <= 4 ? "hodiny" : "hodin");
 
   function renderQuiz() {
     const v = el.quizView;
@@ -986,8 +1006,12 @@
       return;
     }
     if (!quizRun || quizRun.lessonId !== current.id) return renderQuizStart(v);
-    if (quizRun.done) return renderQuizResults(v);
-    renderQuestion(v);
+    if (quizRun.done) return renderQuizResults(v, quizRun);
+    renderQuestion(v, quizRun);
+  }
+
+  function rerenderRun(r) {
+    if (r.scope === "group") renderGroupQuiz(); else renderQuiz();
   }
 
   function renderQuizStart(v) {
@@ -997,7 +1021,7 @@
     const st = current.quizStats;
     const c = h("div", "quiz-card quiz-center");
     c.innerHTML = `<div class="quiz-hero">🎯</div><h3>Kvíz k hodině</h3>
-      <p class="muted">${q.length} ${q.length === 1 ? "otázka" : q.length < 5 ? "otázky" : "otázek"} · ${types.single} × A–D · ${types.multiple} × více správných · ${types.truefalse} × pravda/nepravda</p>
+      <p class="muted">${q.length} ${questionsWord(q.length)} · ${types.single} × A–D · ${types.multiple} × více správných · ${types.truefalse} × pravda/nepravda</p>
       ${st ? `<p class="quiz-best">Nejlepší výsledek: <strong>${st.best} %</strong> · pokusů: ${st.attempts}</p>` : ""}`;
     const row = h("div", "quiz-actions");
     row.append(btn("▶ Spustit kvíz", "", () => startQuiz()));
@@ -1008,21 +1032,27 @@
     v.append(c);
   }
 
-  function renderQuestion(v) {
-    const r = quizRun, qs = current.quiz.questions;
-    const qi = r.order[r.i], q = qs[qi], perm = r.perms[qi];
+  function renderQuestion(v, r) {
+    const k = r.order[r.i], q = qOf(r, k), perm = r.perms[k], src = r.items[k].l;
     const card = h("div", "quiz-card");
     const top = h("div", "quiz-top");
     top.innerHTML = `<span>Otázka ${r.i + 1} z ${r.order.length}${r.onlyWrong ? " · opakování chybných" : ""}</span>
       <span class="quiz-type">${q.type === "multiple" ? "☑ více správných" : q.type === "truefalse" ? "⚖ pravda / nepravda" : "◉ jedna správná"}</span>`;
     const bar = h("div", "quiz-progress", `<div style="width:${(r.i / r.order.length) * 100}%"></div>`);
-    card.append(top, bar, h("h3", "quiz-q", inlineMd(q.question)));
+    card.append(top, bar);
+    if (r.scope === "group") {
+      const s = h("p", "quiz-source small");
+      s.textContent = `📘 ${src.title}${r.topic ? "" : ` · 📁 ${src.topic || UNSORTED}`}`;
+      card.append(s);
+    }
+    card.append(h("h3", "quiz-q", inlineMd(q.question)));
 
     const list = h("div", "quiz-options");
     perm.forEach((orig, pos) => {
       const o = h("button", "quiz-option");
       o.type = "button";
       o.innerHTML = `<span class="quiz-letter">${q.type === "truefalse" ? (orig === 0 ? "✓" : "✗") : LETTERS[pos]}</span><span>${inlineMd(q.options[orig])}</span>`;
+      if (q.type === "multiple" && !r.checked) o.setAttribute("aria-pressed", String(r.selected.has(orig)));
       if (r.selected.has(orig)) o.classList.add("selected");
       if (r.checked) {
         o.disabled = true;
@@ -1032,10 +1062,12 @@
         o.addEventListener("click", () => {
           if (q.type === "multiple") {
             if (r.selected.has(orig)) r.selected.delete(orig); else r.selected.add(orig);
-            renderQuiz();
+            rerenderRun(r);
+            const again = v.querySelectorAll(".quiz-option")[pos];
+            if (again) again.focus();
           } else {
             r.selected = new Set([orig]);
-            checkAnswer();
+            checkAnswer(r);
           }
         });
       }
@@ -1044,42 +1076,47 @@
     card.append(list);
 
     if (!r.checked && q.type === "multiple") {
-      const b = btn("Zkontrolovat", "", checkAnswer);
+      const b = btn("Zkontrolovat", "", () => checkAnswer(r));
       b.disabled = !r.selected.size;
       const row = h("div", "quiz-actions");
       row.append(b);
       card.append(row);
     }
 
+    let nextBtn = null;
     if (r.checked) {
       const ok = r.answers[r.answers.length - 1].ok;
       const fb = h("div", "quiz-feedback " + (ok ? "ok" : "bad"));
+      fb.setAttribute("role", "status");
       const correctLabels = perm.map((orig, pos) => (q.correct.includes(orig)
         ? (q.type === "truefalse" ? q.options[orig] : `${LETTERS[pos]} – ${inlineMd(q.options[orig])}`) : null)).filter(Boolean);
       fb.innerHTML = `<strong>${ok ? "✅ Správně!" : "❌ Tohle nevyšlo."}</strong>` +
         (ok ? "" : ` Správně: <strong>${correctLabels.join(", ")}</strong>`) +
         (q.explanation ? `<p>${inlineMd(q.explanation)}</p>` : "");
       const actions = h("div", "quiz-actions");
-      const si = findSectionIndex(q.section);
-      if (si >= 0) actions.append(btn("📖 Ukázat v zápiscích", "ghost", () => jumpFromQuiz(si)));
-      actions.append(btn(r.i + 1 < r.order.length ? "Další otázka →" : "Zobrazit výsledek 🏁", "", nextQuestion));
+      const si = findSectionIndex(src, q.section);
+      if (si >= 0) actions.append(btn("📖 Ukázat v zápiscích", "ghost", () => jumpToNotes(r, src, si)));
+      nextBtn = btn(r.i + 1 < r.order.length ? "Další otázka →" : "Zobrazit výsledek 🏁", "", () => nextQuestion(r));
+      actions.append(nextBtn);
       fb.append(actions);
       card.append(fb);
     }
     v.append(card);
+    // Keyboard: after answering, focus moves to "next" so Enter continues
+    if (nextBtn && r.focusNext) { r.focusNext = false; nextBtn.focus({ preventScroll: true }); }
   }
 
-  function checkAnswer() {
-    const r = quizRun, q = current.quiz.questions[r.order[r.i]];
+  function checkAnswer(r) {
+    const k = r.order[r.i], q = qOf(r, k);
     const sel = [...r.selected].sort(), cor = [...q.correct].sort();
-    const ok = sel.length === cor.length && sel.every((x, k) => x === cor[k]);
-    r.answers.push({ qi: r.order[r.i], ok });
+    const ok = sel.length === cor.length && sel.every((x, n) => x === cor[n]);
+    r.answers.push({ k, ok });
     r.checked = true;
-    renderQuiz();
+    r.focusNext = true;
+    rerenderRun(r);
   }
 
-  async function nextQuestion() {
-    const r = quizRun;
+  async function nextQuestion(r) {
     r.i++;
     r.selected = new Set();
     r.checked = false;
@@ -1087,50 +1124,288 @@
       r.done = true;
       if (!r.onlyWrong) {
         const pct = Math.round((r.answers.filter((a) => a.ok).length / r.order.length) * 100);
-        const st = current.quizStats || { best: 0, attempts: 0 };
-        current.quizStats = { best: Math.max(st.best, pct), attempts: st.attempts + 1, last: { pct, date: new Date().toISOString() } };
-        await saveCurrent();
+        if (r.scope === "group") {
+          saveGroupStats(r.key, pct);
+        } else {
+          const st = current.quizStats || { best: 0, attempts: 0 };
+          current.quizStats = { best: Math.max(st.best, pct), attempts: st.attempts + 1, last: { pct, date: new Date().toISOString() } };
+          await saveCurrent();
+        }
       }
     }
-    renderQuiz();
-    el.quizView.scrollIntoView({ behavior: "smooth", block: "start" });
+    rerenderRun(r);
+    const view = r.scope === "group" ? el.groupQuiz : el.quizView;
+    view.scrollIntoView({ behavior: "smooth", block: "start" });
+    const first = view.querySelector(".quiz-option:not(:disabled), .quiz-actions button");
+    if (first) first.focus({ preventScroll: true });
   }
 
-  function renderQuizResults(v) {
-    const r = quizRun, qs = current.quiz.questions;
+  function renderQuizResults(v, r) {
     const good = r.answers.filter((a) => a.ok).length, total = r.order.length;
     const pct = Math.round((good / total) * 100);
     const msg = pct >= 90 ? "🏆 Výborně, tohle umíš!" : pct >= 70 ? "👍 Dobrá práce!" : pct >= 50 ? "💪 Už to bude, ještě trochu procvičit." : "📚 Vrať se k zápiskům a zkus to znovu.";
     const c = h("div", "quiz-card quiz-center");
-    c.innerHTML = `<div class="quiz-score" style="--p:${pct}"><span>${pct}<small>%</small></span></div>
+    c.innerHTML = `<div class="quiz-score" style="--p:${pct}" role="img" aria-label="Výsledek ${pct} %"><span>${pct}<small>%</small></span></div>
       <h3>${msg}</h3><p class="muted">${good} z ${total} správně${r.onlyWrong ? " (opakování chybných)" : ""}</p>`;
-    const wrong = r.answers.filter((a) => !a.ok).map((a) => a.qi);
+    const wrong = r.answers.filter((a) => !a.ok).map((a) => a.k);
     const row = h("div", "quiz-actions");
-    if (wrong.length) row.append(btn(`🔁 Procvičit chybné (${wrong.length})`, "", () => startQuiz(wrong)));
-    row.append(btn("🔄 Celý kvíz znovu", wrong.length ? "ghost" : "", () => startQuiz()));
+    const group = r.scope === "group";
+    if (wrong.length) {
+      row.append(btn(`🔁 Procvičit chybné (${wrong.length})`, "", () => {
+        if (group) { groupRun = newRun(r, r.items, shuffle(wrong), true); renderGroupQuiz(); } else startQuiz(wrong);
+      }));
+    }
+    if (group) {
+      row.append(btn("🔄 Nové kolo", wrong.length ? "ghost" : "", () => startGroupQuiz(r.key)));
+      row.append(btn("⚙ Změnit počet otázek", "ghost", () => { groupRun = null; renderGroupQuiz(); }));
+    } else {
+      row.append(btn("🔄 Celý kvíz znovu", wrong.length ? "ghost" : "", () => startQuiz()));
+    }
     c.append(row);
     v.append(c);
     if (wrong.length) {
       const box = h("div", "quiz-card");
       box.append(h("h3", "", "Na co se podívat znovu"));
-      for (const qi of wrong) {
-        const q = qs[qi];
+      for (const k of wrong) {
+        const q = qOf(r, k), src = r.items[k].l;
         const item = h("div", "quiz-review");
         item.innerHTML = `<p class="quiz-review-q">${inlineMd(q.question)}</p>
-          <p class="small">Správně: <strong>${q.correct.map((k) => inlineMd(q.options[k])).join(" · ")}</strong></p>`;
-        const si = findSectionIndex(q.section);
-        if (si >= 0) item.append(btn(`📖 ${plain(splitSections(current.notes).sections[si].title)}`, "link", () => jumpFromQuiz(si)));
+          <p class="small">Správně: <strong>${q.correct.map((n) => inlineMd(q.options[n])).join(" · ")}</strong></p>`;
+        const si = findSectionIndex(src, q.section);
+        const secTitle = si >= 0 ? plain(splitSections(src.notes).sections[si].title) : "";
+        if (group) {
+          const label = `📘 ${src.title}${secTitle ? ` › ${secTitle}` : ""}`;
+          item.append(btn(label, "link", () => jumpToNotes(r, src, si)));
+        } else if (si >= 0) {
+          item.append(btn(`📖 ${secTitle}`, "link", () => jumpToNotes(r, src, si)));
+        }
         box.append(item);
       }
       v.append(box);
     }
   }
 
-  function jumpFromQuiz(sectionIndex) {
-    openSection(sectionIndex);
+  // "Show in notes": the lesson quiz switches tab; the topic quiz opens the source lesson
+  function jumpToNotes(r, l, sectionIndex) {
+    if (r.scope === "group") {
+      openLesson(l, { fromGroup: true });
+      if (sectionIndex >= 0) openSection(sectionIndex);
+    } else {
+      openSection(sectionIndex);
+    }
     el.backToQuiz.hidden = false;
   }
-  el.backToQuiz.addEventListener("click", () => setTab("quiz"));
+  el.backToQuiz.addEventListener("click", () => {
+    const st = window.history.state;
+    if (st && st.view === "lesson" && st.fromGroup) window.history.back();
+    else setTab("quiz");
+  });
+
+  /* ---------- Topic / subject quiz (questions mixed from several lessons) ---------- */
+  let groupRun = null;    // run with { scope: "group", key }
+  let groupKey = null;    // group shown in groupQuizView
+  let groupBusy = null;   // { done, total, title } while missing quizzes are being created
+  const GROUP_STATS = "tv.groupQuizStats";
+  const groupKeyFor = (sid, topic) => (topic == null ? `s:${sid}` : `t:${sid}:${topic}`);
+
+  function parseGroupKey(key) {
+    const m = /^(s|t):([^:]+)(?::([\s\S]*))?$/.exec(key || "");
+    if (!m) return null;
+    return { sid: m[2], topic: m[1] === "t" ? m[3] : null };
+  }
+
+  function groupLessons(key) {
+    const g = parseGroupKey(key);
+    if (!g) return [];
+    return lessons.filter((l) => subjectKey(l) === g.sid && (g.topic == null || (l.topic || UNSORTED) === g.topic) && l.notes)
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  const hasQuiz = (l) => !!(l.quiz && l.quiz.questions && l.quiz.questions.length);
+  const groupStats = () => store.get(GROUP_STATS, {}) || {};
+
+  function saveGroupStats(key, pct) {
+    const all = groupStats();
+    const st = all[key] || { best: 0, attempts: 0 };
+    all[key] = { best: Math.max(st.best, pct), attempts: st.attempts + 1, last: { pct, date: new Date().toISOString() } };
+    store.set(GROUP_STATS, all);
+  }
+
+  function groupTitle(key) {
+    const g = parseGroupKey(key);
+    return g.topic == null ? `Kvíz z předmětu ${SUBJECTS[g.sid] ? SUBJECTS[g.sid].label : "Ostatní"}` : `Kvíz z tématu ${g.topic}`;
+  }
+
+  // Library entry point under a topic folder or a subject
+  function groupQuizRow(sid, topic) {
+    const key = groupKeyFor(sid, topic);
+    const ls = groupLessons(key);
+    const withQuiz = ls.filter(hasQuiz);
+    const n = withQuiz.reduce((s, l) => s + l.quiz.questions.length, 0);
+    const row = h("div", "group-quiz-row");
+    const b = btn(topic == null ? "🎯 Kvíz z celého předmětu" : "🎯 Kvíz z celého tématu", "group-quiz-btn", () => showGroupQuiz(key, true));
+    const info = h("span", "muted small");
+    info.textContent = n ? `${n} ${questionsWord(n)} · ${withQuiz.length} ${lessonsWord(withQuiz.length)}` : "kvízy zatím nejsou";
+    row.append(b, info);
+    const st = groupStats()[key];
+    if (st) {
+      const badge = h("span", "quiz-badge");
+      badge.title = "Nejlepší výsledek v kvízu z tématu";
+      badge.textContent = `🎯 ${st.best} %`;
+      row.append(badge);
+    }
+    return row;
+  }
+
+  function showGroupQuiz(key, push) {
+    if (!groupLessons(key).length) { showHome(false); return; }
+    if (groupKey !== key) groupRun = null;
+    groupKey = key;
+    if (groupRun && groupRun.checked) groupRun.focusNext = true; // back from the notes: Enter continues
+    el.homeView.hidden = true;
+    el.lessonView.hidden = true;
+    el.groupQuizView.hidden = false;
+    const g = parseGroupKey(key);
+    el.groupQuizView.dataset.subject = g.sid;
+    el.groupQuizPath.textContent = g.topic == null ? subjectLabel(g.sid) : `${subjectLabel(g.sid)} › 📁 ${g.topic}`;
+    el.groupQuizTitle.textContent = "🎯 " + groupTitle(key);
+    renderGroupQuiz();
+    if (push) window.history.pushState({ view: "group", key }, "");
+    window.scrollTo({ top: 0 });
+  }
+
+  function hideGroupQuiz() { el.groupQuizView.hidden = true; }
+
+  el.groupBackBtn.addEventListener("click", () => {
+    if (window.history.state && window.history.state.view === "group") window.history.back();
+    else showHome(false);
+  });
+
+  const GROUP_COUNTS = [10, 20, 30];
+  let groupCount = store.get("tv.groupQuizCount", 20);
+
+  function startGroupQuiz(key) {
+    // Balanced mix: take questions round-robin from the lessons (each lesson's questions shuffled), then shuffle
+    const pools = shuffle(groupLessons(key).filter(hasQuiz)).map((l) => shuffle(l.quiz.questions.map((q, qi) => ({ l, qi, q }))));
+    const total = pools.reduce((s, p) => s + p.length, 0);
+    const want = groupCount === "all" ? total : Math.min(groupCount, total);
+    const items = [];
+    for (let round = 0; items.length < want; round++) {
+      for (const p of pools) if (round < p.length && items.length < want) items.push(p[round]);
+    }
+    const mixed = shuffle(items);
+    groupRun = newRun({ scope: "group", key, topic: parseGroupKey(key).topic }, mixed, mixed.map((_, k) => k), false);
+    renderGroupQuiz();
+  }
+
+  async function createMissingQuizzes(key) {
+    if (groupBusy) return;
+    if (!settings.openaiKey) { el.settingsBtn.click(); return; }
+    const missing = groupLessons(key).filter((l) => !hasQuiz(l));
+    if (!missing.length) return;
+    groupBusy = { done: 0, total: missing.length, title: missing[0].title };
+    renderGroupQuiz();
+    const failed = [];
+    try {
+      const model = await resolveNotesModel();
+      for (const l of missing) {
+        groupBusy.title = l.title;
+        renderGroupQuiz();
+        try {
+          l.quiz = await generateQuiz(l, model);
+          await LessonDB.put(l);
+        } catch (e) {
+          failed.push(l.title);
+        }
+        groupBusy.done++;
+      }
+    } catch (e) {
+      showError(e.message);
+    } finally {
+      groupBusy = null;
+      if (failed.length) showError(`Kvíz se nepodařilo vytvořit pro: ${failed.join(", ")}. Zkus to prosím znovu.`);
+      if (!el.groupQuizView.hidden) renderGroupQuiz();
+    }
+  }
+
+  function renderGroupQuiz() {
+    const v = el.groupQuiz;
+    v.innerHTML = "";
+    const key = groupKey;
+    if (groupBusy) {
+      const c = h("div", "quiz-card quiz-center");
+      c.innerHTML = `<div class="spinner"></div><p>Vytvářím kvíz ${groupBusy.done + 1} z ${groupBusy.total}…</p>`;
+      const t = h("p", "muted small");
+      t.textContent = groupBusy.title;
+      c.append(t);
+      v.append(c);
+      return;
+    }
+    if (groupRun && groupRun.key === key) {
+      if (groupRun.done) return renderQuizResults(v, groupRun);
+      return renderQuestion(v, groupRun);
+    }
+    renderGroupStart(v, key);
+  }
+
+  function renderGroupStart(v, key) {
+    const ls = groupLessons(key);
+    const withQuiz = ls.filter(hasQuiz);
+    const missing = ls.length - withQuiz.length;
+    const total = withQuiz.reduce((s, l) => s + l.quiz.questions.length, 0);
+    const st = groupStats()[key];
+    const c = h("div", "quiz-card quiz-center");
+    c.innerHTML = `<div class="quiz-hero">🎯</div>
+      <p class="muted">${total
+        ? `${total} ${questionsWord(total)} · ${withQuiz.length} ${lessonsWord(withQuiz.length)} s kvízem. Otázky se míchají napříč hodinami a u každé uvidíš, ze které hodiny je.`
+        : "Žádná hodina tady zatím nemá kvíz."}</p>
+      ${missing ? `<p class="small">Bez kvízu: ${missing} ${lessonsWord(missing)}.</p>` : ""}
+      ${st ? `<p class="quiz-best">Nejlepší výsledek: <strong>${st.best} %</strong> · pokusů: ${st.attempts}</p>` : ""}`;
+    if (total) {
+      const opts = GROUP_COUNTS.filter((n) => n < total);
+      const choices = [...opts.map((n) => [n, String(n)]), ["all", `Všechny (${total})`]];
+      if (groupCount !== "all" && !opts.includes(groupCount)) groupCount = opts.length ? opts[opts.length - 1] : "all";
+      const pick = h("div", "count-pick");
+      pick.setAttribute("role", "radiogroup");
+      pick.setAttribute("aria-label", "Počet otázek");
+      pick.append(h("span", "muted small", "Počet otázek:"));
+      for (const [val, label] of choices) {
+        const b = btn(label, "chip", () => {
+          groupCount = val;
+          store.set("tv.groupQuizCount", val);
+          renderGroupQuiz();
+          const sel = v.querySelector('.count-pick [aria-checked="true"]');
+          if (sel) sel.focus();
+        });
+        b.setAttribute("role", "radio");
+        b.setAttribute("aria-checked", String(groupCount === val));
+        pick.append(b);
+      }
+      c.append(pick);
+    }
+    const row = h("div", "quiz-actions");
+    if (total) row.append(btn("▶ Spustit kvíz", "", () => startGroupQuiz(key)));
+    if (missing) {
+      row.append(btn(`✨ Vytvořit chybějící kvízy (${missing})`, total ? "ghost" : "", () => {
+        if (confirm(`Vytvořit kvíz pro ${missing} ${lessonsWord(missing)}? Každý stojí pár centů.`)) createMissingQuizzes(key);
+      }));
+    }
+    c.append(row);
+    v.append(c);
+    const list = h("div", "quiz-card group-lessons");
+    list.append(h("h3", "", "Hodiny v kvízu"));
+    const ul = h("ul", "");
+    for (const l of ls) {
+      const li = h("li", "");
+      const open = btn(l.title, "link", () => openLesson(l, { fromGroup: true }));
+      const meta = h("span", "muted small");
+      meta.textContent = hasQuiz(l) ? `${l.quiz.questions.length} ${questionsWord(l.quiz.questions.length)}` : "bez kvízu";
+      li.append(open, meta);
+      ul.append(li);
+    }
+    list.append(ul);
+    v.append(list);
+  }
 
   function renderResult() {
     if (!current) return;
@@ -1479,6 +1754,8 @@
         el.library.append(sd);
         container = sd;
       }
+      const subjectTopics = new Set(lessons.filter((l) => subjectKey(l) === sid && l.notes).map((l) => l.topic || UNSORTED));
+      if (subjectTopics.size >= 2) container.append(groupQuizRow(sid, null));
       const topics = [...new Set(inSubject.map((l) => l.topic || UNSORTED))]
         .sort((a, b) => (a === UNSORTED) - (b === UNSORTED) || a.localeCompare(b, "cs"));
       for (const topic of topics) {
@@ -1492,6 +1769,7 @@
         ul.className = "lessons";
         for (const l of items) ul.append(lessonItem(l));
         td.append(ul);
+        if (groupLessons(groupKeyFor(sid, topic)).length >= 2) td.append(groupQuizRow(sid, topic));
         container.append(td);
       }
     }
@@ -1535,7 +1813,7 @@
 
   el.exportBtn.addEventListener("click", () => {
     const stamp = new Date().toISOString().slice(0, 10);
-    downloadFile(`zapisky-zaloha-${stamp}.json`, JSON.stringify({ app: "lesson-notes", version: 1, lessons }, null, 1),
+    downloadFile(`zapisky-zaloha-${stamp}.json`, JSON.stringify({ app: "lesson-notes", version: 1, lessons, groupQuizStats: groupStats() }, null, 1),
       "application/json");
   });
 
@@ -1547,6 +1825,16 @@
       const data = JSON.parse(await f.text());
       const incoming = (data.lessons || []).filter((l) => l && l.id && typeof l.transcript === "string");
       for (const l of incoming) await LessonDB.put(l);
+      if (data.groupQuizStats && typeof data.groupQuizStats === "object") {
+        // Topic-quiz results: keep the better best score and the higher attempt count
+        const all = groupStats();
+        for (const [k, st] of Object.entries(data.groupQuizStats)) {
+          if (!st || typeof st.best !== "number") continue;
+          const mine = all[k];
+          all[k] = mine ? Object.assign({}, mine, { best: Math.max(mine.best, st.best), attempts: Math.max(mine.attempts || 0, st.attempts || 0) }) : st;
+        }
+        store.set(GROUP_STATS, all);
+      }
       lessons = await loadLessons();
       renderLibrary();
       alert(`Obnoveno ze zálohy: ${incoming.length}.`);
@@ -1619,6 +1907,38 @@
       prompt("Zkopíruj tento instalační odkaz:", buildSetupLink());
     }
   });
+
+  /* ---------- Light / dark mode: auto (follows the system) → light → dark ---------- */
+  const THEMES = {
+    auto: { icon: "🌓", label: "Automaticky", next: "light" },
+    light: { icon: "☀️", label: "Světlý", next: "dark" },
+    dark: { icon: "🌙", label: "Tmavý", next: "auto" },
+  };
+  // Same key and values as the admission quizzes (same site origin), so one choice applies to both apps.
+  // Stored as a plain string "auto" | "light" | "dark"; a JSON-quoted value is accepted too.
+  const THEME_KEY = "quiz-theme";
+  const readTheme = () => {
+    try { return (localStorage.getItem(THEME_KEY) || "auto").replace(/"/g, ""); } catch { return "auto"; }
+  };
+  let theme = readTheme();
+  if (!THEMES[theme]) theme = "auto";
+  const themeBtn = $("themeBtn");
+
+  function applyTheme() {
+    if (theme === "auto") delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+    const t = THEMES[theme];
+    themeBtn.innerHTML = `<span aria-hidden="true">${t.icon}</span><span class="theme-label">${t.label}</span>`;
+    themeBtn.setAttribute("aria-label", `Vzhled: ${t.label.toLowerCase()}. Přepnout na ${THEMES[t.next].label.toLowerCase()}.`);
+    themeBtn.title = `Vzhled: ${t.label} (klikni pro ${THEMES[t.next].label.toLowerCase()})`;
+  }
+
+  themeBtn.addEventListener("click", () => {
+    theme = THEMES[theme].next;
+    try { localStorage.setItem(THEME_KEY, theme); } catch { /* private mode: applies to this visit only */ }
+    applyTheme();
+  });
+  applyTheme();
 
   /* ---------- Init ---------- */
   importKeysFromHash();

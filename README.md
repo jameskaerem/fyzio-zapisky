@@ -41,6 +41,14 @@ A small static web app (UI in Czech) that turns recorded Czech lessons into a tr
     - **After a wrong answer**: “Show in notes” jumps to the section and a “Back to quiz” button returns to the same question.
     - **Results**: score ring, a list of the missed questions with links, and “Practise wrong ones”. The best score is saved and shown in the library.
     - **Notes**: they no longer contain test questions.
+15. **Topic and subject quiz**:
+    - **Where**: in the library, every topic folder with at least two lessons has “🎯 Kvíz z celého tématu”, and every subject with at least two folders has “🎯 Kvíz z celého předmětu”. The row shows how many questions are available and the best score.
+    - **Questions**: taken from the lesson quizzes, mixed evenly across the lessons (round-robin, then shuffled). Choose 10, 20, 30 or all questions. Each question shows which lesson it comes from.
+    - **Missing quizzes**: lessons without a quiz are listed, and “Vytvořit chybějící kvízy” creates them one by one (a few cents each).
+    - **After a wrong answer**: “Show in notes” opens the source lesson at that section; “Back to quiz” and the back button return to the same question.
+    - **Results**: score, practise wrong ones, new round. Topic and subject best scores are stored in `localStorage` (`tv.groupQuizStats`) and are included in the JSON backup.
+
+16. **Light / dark mode**: the 🌓 button in the header cycles Automatic (follows the system) → Light → Dark. The choice is stored in `localStorage` under `quiz-theme` (`auto` | `light` | `dark`), the same key the admission quizzes use on this site, so one choice applies to both apps. A small inline script applies it before the page paints.
 
 ## Setup
 
