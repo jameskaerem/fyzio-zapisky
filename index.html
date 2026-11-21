@@ -6,13 +6,20 @@
   <title>Fyzio zápisky</title>
   <meta name="description" content="Přepis nahraných hodin a strukturované studijní zápisky pro přípravu na přijímačky na fyzioterapii.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🩺</text></svg>">
-  <link rel="stylesheet" href="styles.css?v=14">
+  <script>
+    // Apply the saved light/dark choice before the page paints (no flash)
+    try { var t = (localStorage.getItem("quiz-theme") || "").replace(/"/g, ""); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body>
   <header class="top">
     <div class="wrap row">
       <h1>🩺 Fyzio zápisky</h1>
-      <button id="settingsBtn" class="ghost" type="button">⚙ Nastavení</button>
+      <div class="top-actions">
+        <button id="themeBtn" class="ghost theme-btn" type="button"></button>
+        <button id="settingsBtn" class="ghost" type="button">⚙ Nastavení</button>
+      </div>
     </div>
   </header>
 
@@ -219,14 +226,14 @@
     </form>
   </dialog>
 
-  <script src="vendor/mp4box.all.min.js?v=14"></script>
-  <script src="vendor/marked.min.js?v=14"></script>
-  <script src="vendor/purify.min.js?v=14"></script>
-  <script src="vendor/d3.min.js?v=14"></script>
-  <script src="vendor/markmap-view.js?v=14"></script>
-  <script src="subjects.js?v=14"></script>
-  <script src="db.js?v=14"></script>
-  <script src="audio.js?v=14"></script>
-  <script src="app.js?v=14"></script>
+  <script src="vendor/mp4box.all.min.js?v=15"></script>
+  <script src="vendor/marked.min.js?v=15"></script>
+  <script src="vendor/purify.min.js?v=15"></script>
+  <script src="vendor/d3.min.js?v=15"></script>
+  <script src="vendor/markmap-view.js?v=15"></script>
+  <script src="subjects.js?v=15"></script>
+  <script src="db.js?v=15"></script>
+  <script src="audio.js?v=15"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>

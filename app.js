@@ -1908,6 +1908,38 @@
     }
   });
 
+  /* ---------- Light / dark mode: auto (follows the system) → light → dark ---------- */
+  const THEMES = {
+    auto: { icon: "🌓", label: "Automaticky", next: "light" },
+    light: { icon: "☀️", label: "Světlý", next: "dark" },
+    dark: { icon: "🌙", label: "Tmavý", next: "auto" },
+  };
+  // Same key and values as the admission quizzes (same site origin), so one choice applies to both apps.
+  // Stored as a plain string "auto" | "light" | "dark"; a JSON-quoted value is accepted too.
+  const THEME_KEY = "quiz-theme";
+  const readTheme = () => {
+    try { return (localStorage.getItem(THEME_KEY) || "auto").replace(/"/g, ""); } catch { return "auto"; }
+  };
+  let theme = readTheme();
+  if (!THEMES[theme]) theme = "auto";
+  const themeBtn = $("themeBtn");
+
+  function applyTheme() {
+    if (theme === "auto") delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+    const t = THEMES[theme];
+    themeBtn.innerHTML = `<span aria-hidden="true">${t.icon}</span><span class="theme-label">${t.label}</span>`;
+    themeBtn.setAttribute("aria-label", `Vzhled: ${t.label.toLowerCase()}. Přepnout na ${THEMES[t.next].label.toLowerCase()}.`);
+    themeBtn.title = `Vzhled: ${t.label} (klikni pro ${THEMES[t.next].label.toLowerCase()})`;
+  }
+
+  themeBtn.addEventListener("click", () => {
+    theme = THEMES[theme].next;
+    try { localStorage.setItem(THEME_KEY, theme); } catch { /* private mode: applies to this visit only */ }
+    applyTheme();
+  });
+  applyTheme();
+
   /* ---------- Init ---------- */
   importKeysFromHash();
   if (settings.subject !== "auto" && !SUBJECTS[settings.subject]) settings.subject = "auto";
