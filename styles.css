@@ -543,6 +543,35 @@ details.section[open] > .section-body { animation: sec-in 0.35s ease; }
   background: color-mix(in srgb, var(--sec, var(--accent)) 14%, transparent); color: var(--text);
 }
 
+/* ===== Topic / subject quiz ===== */
+#groupQuizView .result-path { color: var(--subj); }
+#groupQuizView h2 { margin: 2px 0 6px; }
+.group-quiz-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px;
+  margin: 0 8px 10px; padding: 8px 10px; border-radius: 10px;
+  background: color-mix(in srgb, var(--sec, var(--subj)) 9%, transparent);
+}
+.lib-subject > .group-quiz-row { margin: 10px 10px 4px; }
+.library > .group-quiz-row { margin: 10px 0; }
+.group-quiz-btn {
+  background: var(--sec, var(--subj)); border-color: var(--sec, var(--subj)); color: #fff;
+  border-radius: 999px; padding: 6px 14px; font-size: 0.9rem; font-weight: 600;
+}
+.group-quiz-btn:hover { filter: brightness(1.08); }
+.quiz-source {
+  margin: -6px 0 10px; color: var(--subj); font-weight: 600;
+}
+.count-pick { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; margin-top: 12px; }
+.count-pick .chip[aria-checked="true"] { background: var(--subj); border-color: var(--subj); color: #fff; }
+.group-lessons ul { list-style: none; margin: 0; padding: 0; }
+.group-lessons li {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 7px 0; border-top: 1px solid var(--border);
+}
+.group-lessons li .link { text-align: left; color: var(--text); text-decoration: none; font-weight: 500; }
+.group-lessons li .link:hover { color: var(--subj); }
+.group-lessons li .muted { white-space: nowrap; }
+
 @media (max-width: 520px) {
   .tabs button { white-space: nowrap; font-size: 0.82rem; padding: 7px 2px; }
 }
@@ -551,7 +580,7 @@ details.section[open] > .section-body { animation: sec-in 0.35s ease; }
 @media print {
   :root { color-scheme: light; }
   body { background: #fff !important; color: #111 !important; font-size: 11pt; }
-  .top, #homeView, .back-btn, .toolbar, .section-tools, #toc, #mapView, #transcriptView,
+  .top, #homeView, #groupQuizView, .back-btn, .toolbar, .section-tools, #toc, #mapView, #transcriptView,
   #editBtn, #annotationForm, .annotation-head button, #notesPane > p.muted, #error, dialog { display: none !important; }
   .wrap { max-width: none; padding: 0; }
   #lessonView { display: block !important; }
