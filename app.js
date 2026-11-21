@@ -104,24 +104,79 @@
   };
   const subjectLabel = (id) => (SUBJECTS[id] ? `${SUBJECTS[id].icon} ${SUBJECTS[id].label}` : "📄 Ostatní");
 
+  /* ---------- Sliding highlight ("pill") behind the selected chip/tab ----------
+   * One persistent element per group glides (and changes colour) to the selected button.
+   * Buttons can be rebuilt freely; the pill stays, so the move animates. */
+  const pillObservers = new WeakMap();
+
+  function placePill(host, animate) {
+    let pill = host.querySelector(":scope > .pill");
+    if (!pill) {
+      pill = document.createElement("span");
+      pill.className = "pill";
+      pill.setAttribute("aria-hidden", "true");
+      host.prepend(pill);
+      animate = false;
+    }
+    const sel = host.querySelector(':scope > [aria-checked="true"], :scope > [aria-selected="true"]');
+    if (!sel || !sel.offsetWidth) { pill.style.opacity = "0"; return; }
+    if (!animate) pill.classList.add("no-anim");
+    pill.style.opacity = "1";
+    pill.style.width = sel.offsetWidth + "px";
+    pill.style.height = sel.offsetHeight + "px";
+    pill.style.transform = `translate(${sel.offsetLeft}px, ${sel.offsetTop}px)`;
+    const c = getComputedStyle(sel).getPropertyValue("--subj").trim();
+    if (c) pill.style.setProperty("--pill", c);
+    if (!animate) { void pill.offsetWidth; pill.classList.remove("no-anim"); }
+  }
+
+  // Keep the pill in place when fonts load, the window resizes or a hidden view becomes visible
+  function watchPill(host) {
+    let ro = pillObservers.get(host);
+    if (!ro) {
+      if (typeof ResizeObserver === "undefined") return;
+      ro = new ResizeObserver(() => placePill(host, false));
+      pillObservers.set(host, ro);
+    }
+    ro.disconnect();
+    ro.observe(host);
+    host.querySelectorAll(":scope > button").forEach((b) => ro.observe(b));
+  }
+
+  function popIcon(btn) {
+    const ic = btn.querySelector(".chip-icon");
+    if (!ic) return;
+    ic.classList.remove("pop");
+    void ic.offsetWidth;
+    ic.classList.add("pop");
+  }
+
+  const chipHtml = (icon, label) => `<span class="chip-icon" aria-hidden="true">${icon}</span><span class="chip-label">${escapeHtml(label)}</span>`;
+
   /* ---------- Subject picker ---------- */
   function renderSubjects() {
-    el.subjects.innerHTML = "";
-    const options = [["auto", "✨ Rozpoznat automaticky"], ...Object.entries(SUBJECTS).map(([id, s]) => [id, `${s.icon} ${s.label}`])];
-    for (const [id, label] of options) {
+    el.subjects.querySelectorAll(":scope > button").forEach((b) => b.remove());
+    const options = [["auto", "✨", "Rozpoznat automaticky"], ...Object.entries(SUBJECTS).map(([id, s]) => [id, s.icon, s.label])];
+    for (const [id, icon, label] of options) {
       const b = document.createElement("button");
       b.type = "button";
       b.setAttribute("role", "radio");
       b.setAttribute("aria-checked", String(settings.subject === id));
-      b.textContent = label;
+      if (id !== "auto") b.dataset.subject = id;
+      b.innerHTML = chipHtml(icon, label);
       b.addEventListener("click", () => {
-        if (busy) return;
+        if (busy || settings.subject === id) return;
         settings.subject = id;
         saveSettings();
-        renderSubjects();
+        el.subjects.querySelectorAll(":scope > button").forEach((x) => x.setAttribute("aria-checked", String(x === b)));
+        placePill(el.subjects, true);
+        popIcon(b);
       });
       el.subjects.append(b);
     }
+    el.subjects.classList.add("pill-host");
+    placePill(el.subjects, false);
+    watchPill(el.subjects);
   }
 
   function refreshInfo() {
@@ -1504,6 +1559,9 @@
     el.tabQuiz.setAttribute("aria-selected", String(tab === "quiz"));
     el.quizView.hidden = tab !== "quiz";
     el.tabTranscript.setAttribute("aria-selected", String(tab === "transcript"));
+    el.tabs.classList.add("pill-host");
+    placePill(el.tabs, true);
+    watchPill(el.tabs);
     el.notesPane.hidden = tab !== "notes";
     el.mapView.hidden = tab !== "map";
     el.transcriptView.hidden = tab !== "transcript";
@@ -1706,27 +1764,38 @@
   let libFilter = store.get("tv.libFilter", "all");
 
   function renderLibTabs() {
-    el.libTabs.innerHTML = "";
+    el.libTabs.querySelectorAll(":scope > button").forEach((b) => b.remove());
     const counts = {};
     for (const l of lessons) counts[subjectKey(l)] = (counts[subjectKey(l)] || 0) + 1;
-    const tabs = [["all", "📚 Vše", lessons.length],
-      ...Object.entries(SUBJECTS).map(([id, s]) => [id, `${s.icon} ${s.label}`, counts[id] || 0])];
-    if (counts.other) tabs.push(["other", "📄 Ostatní", counts.other]);
+    const tabs = [["all", "📚", "Vše", lessons.length],
+      ...Object.entries(SUBJECTS).map(([id, s]) => [id, s.icon, s.label, counts[id] || 0])];
+    if (counts.other) tabs.push(["other", "📄", "Ostatní", counts.other]);
     if (!tabs.some(([id]) => id === libFilter)) libFilter = "all";
-    for (const [id, label, n] of tabs) {
+    for (const [id, icon, label, n] of tabs) {
       const bt = document.createElement("button");
       bt.type = "button";
       bt.setAttribute("role", "tab");
       bt.setAttribute("aria-selected", String(libFilter === id));
-      bt.innerHTML = `${escapeHtml(label)} <span class="count">${n}</span>`;
+      if (SUBJECTS[id]) bt.dataset.subject = id;
+      bt.innerHTML = `${chipHtml(icon, label)} <span class="count">${n}</span>`;
       bt.addEventListener("click", () => {
+        if (libFilter === id) return;
         libFilter = id;
         store.set("tv.libFilter", id);
         renderLibrary();
+        const now = el.libTabs.querySelector('[aria-selected="true"]');
+        if (now) {
+          popIcon(now);
+          now.focus({ preventScroll: true, focusVisible: false });
+          now.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+        }
       });
       el.libTabs.append(bt);
     }
     el.libTabs.hidden = !lessons.length;
+    el.libTabs.classList.add("pill-host");
+    placePill(el.libTabs, true);
+    watchPill(el.libTabs);
   }
 
   function renderLibrary() {

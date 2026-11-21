@@ -50,6 +50,8 @@ A small static web app (UI in Czech) that turns recorded Czech lessons into a tr
 
 16. **Light / dark mode**: the 🌓 button in the header cycles Automatic (follows the system) → Light → Dark. The choice is stored in `localStorage` under `quiz-theme` (`auto` | `light` | `dark`), the same key the admission quizzes use on this site, so one choice applies to both apps. A small inline script applies it before the page paints.
 
+17. **Tabs and subject chips**: the subject picker, the library tabs and the lesson tabs have a coloured highlight that glides to the chosen item (in that subject's colour), with a small icon bounce. Turned off when the system asks for reduced motion.
+
 ## Setup
 
 - Script and stylesheet URLs carry a `?v=N` query. Bump it in `index.html` on every release so browsers never mix a new page with cached old scripts (GitHub Pages caches files for about 10 minutes).

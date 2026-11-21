@@ -652,3 +652,78 @@ details.section[open] > .section-body { animation: sec-in 0.35s ease; }
 @media (min-width: 900px) {
   .map-preview { left: auto; width: 360px; top: 12px; bottom: auto; max-height: calc(100% - 24px); }
 }
+
+/* ===== Tabs & subject chips v3: sliding coloured pill, icon pop ===== */
+.pill-host { position: relative; isolation: isolate; }
+.pill-host > .pill {
+  --pill: var(--accent);
+  position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--pill) 82%, #fff), var(--pill) 55%, color-mix(in srgb, var(--pill) 85%, #000));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--pill) 38%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition:
+    transform 0.5s cubic-bezier(0.34, 1.35, 0.5, 1),
+    width 0.5s cubic-bezier(0.34, 1.35, 0.5, 1),
+    height 0.3s ease, --pill 0.4s ease, opacity 0.2s;
+}
+@property --pill { syntax: "<color>"; inherits: true; initial-value: #2f6fde; }
+.pill-host > .pill.no-anim { transition: none; }
+.pill-host > button { position: relative; z-index: 1; }
+
+/* Subject picker (upload) and library tabs share the chip look */
+.subjects button, .lib-tabs button {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 999px;
+  transition: color 0.25s, border-color 0.25s, background-color 0.25s, transform 0.2s ease, box-shadow 0.2s ease;
+}
+.chip-icon {
+  display: inline-grid; place-items: center; width: 1.7em; height: 1.7em; margin-left: -6px;
+  border-radius: 50%; line-height: 1;
+  background: color-mix(in srgb, var(--subj) 14%, transparent);
+  transition: background-color 0.25s, transform 0.25s;
+}
+.subjects button:not([aria-checked="true"]):hover,
+.lib-tabs button:not([aria-selected="true"]):hover {
+  border-color: color-mix(in srgb, var(--subj) 55%, var(--border));
+  background: color-mix(in srgb, var(--subj) 7%, var(--surface));
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--subj) 18%, transparent);
+}
+.subjects button:not([aria-checked="true"]):hover .chip-icon,
+.lib-tabs button:not([aria-selected="true"]):hover .chip-icon { transform: rotate(-10deg) scale(1.12); }
+.subjects button:active, .lib-tabs button:active { transform: scale(0.96); }
+.subjects button[aria-checked="true"], .lib-tabs button[aria-selected="true"] {
+  background: transparent; border-color: transparent; color: #fff; font-weight: 600;
+}
+.subjects button[aria-checked="true"] .chip-icon,
+.lib-tabs button[aria-selected="true"] .chip-icon { background: rgba(255, 255, 255, 0.24); }
+.lib-tabs button[aria-selected="true"] .count { background: rgba(255, 255, 255, 0.22); color: #fff; border-color: transparent; }
+.lib-tabs .count { transition: background-color 0.25s, color 0.25s; }
+.lib-tabs { padding: 2px 2px 6px; }
+.lib-tabs button { padding: 6px 12px; }
+.chip-icon.pop { animation: chip-pop 0.5s cubic-bezier(0.34, 1.6, 0.5, 1); }
+@keyframes chip-pop {
+  0% { transform: scale(1) rotate(0); }
+  40% { transform: scale(1.35) rotate(-12deg); }
+  70% { transform: scale(0.92) rotate(6deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+.subjects button:focus-visible, .lib-tabs button:focus-visible, .tabs button:focus-visible {
+  outline: 2px solid var(--subj); outline-offset: 2px;
+}
+
+/* Lesson tabs (Zápisky / Kvíz / Mapa / Přepis): white pill gliding in the grey track */
+.tabs > .pill {
+  border-radius: 9px; background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), inset 0 -2px 0 var(--subj);
+}
+.tabs.pill-host button[aria-selected="true"] { background: transparent; box-shadow: none; }
+.tabs button:not([aria-selected="true"]):hover { color: var(--text); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pill-host > .pill { transition: opacity 0.2s; }
+  .chip-icon.pop { animation: none; }
+  .subjects button, .lib-tabs button, .chip-icon { transition: none; }
+  .subjects button:hover, .lib-tabs button:hover { transform: none !important; }
+}
